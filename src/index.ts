@@ -278,15 +278,11 @@ export function apply(ctx: Context, config: Config) {
         const hImg = h.image(buffer, `image/${config.imageType}`)
         return await sendMessage(session, `【@${username}】\n游戏已经开始啦！\n${hImg}`);
       }
-      if (!engines[channelId]) {
-        await initEngine(channelId);
-        while (true) {
-          const gameRecord = await getGameRecord(channelId);
-          if (gameRecord.isEngineReady) {
-            break;
-          }
-          await sleep(500);
-        }
+      await checkEngine(channelId);
+      if (engines[channelId] && !gameRecord.isEngineReady) {
+        await ctx.database.set('cchess_game_records', {channelId}, {
+          isEngineReady: true
+        })
       }
       if (!choice) {
         choice = Math.random() < 0.5 ? '红方' : '黑方';
@@ -321,15 +317,11 @@ export function apply(ctx: Context, config: Config) {
       if (gameRecord.isStarted) {
         return await sendMessage(session, `【@${username}】\n游戏已经开始啦~\n不许逃跑哦！`);
       }
-      if (!engines[channelId]) {
-        await initEngine(channelId);
-        while (true) {
-          const gameRecord = await getGameRecord(channelId);
-          if (gameRecord.isEngineReady) {
-            break;
-          }
-          await sleep(500);
-        }
+      await checkEngine(channelId);
+      if (engines[channelId] && !gameRecord.isEngineReady) {
+        await ctx.database.set('cchess_game_records', {channelId}, {
+          isEngineReady: true
+        })
       }
       const getPlayerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
       const getPlayerRecords = await ctx.database.get('cchess_gaming_player_records', {channelId})
@@ -511,6 +503,12 @@ export function apply(ctx: Context, config: Config) {
       const {username, userId, channelId} = session
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
+      await checkEngine(channelId);
+      if (engines[channelId] && !gameRecord.isEngineReady) {
+        await ctx.database.set('cchess_game_records', {channelId}, {
+          isEngineReady: true
+        })
+      }
       if (!gameRecord.isStarted) {
         return await sendMessage(session, `【@${username}】\n游戏未开始哦！\n完全没必要强制结束嘛~`);
       } else {
@@ -1552,20 +1550,11 @@ export function apply(ctx: Context, config: Config) {
     // console.log(engines[channelId])
     // console.log(gameRecord.isEngineReady, null !== engines[channelId])
 
-    if (!engines[channelId]) {
+    await checkEngine(channelId);
+    if (engines[channelId] && !gameRecord.isEngineReady) {
       await ctx.database.set('cchess_game_records', {channelId}, {
-        isEngineReady: false
+        isEngineReady: true
       })
-
-      await initEngine(channelId);
-
-      while (true) {
-        const gameRecord = await getGameRecord(channelId);
-        if (gameRecord.isEngineReady) {
-          break;
-        }
-        await sleep(500);
-      }
     }
 
     if (null !== engines[channelId] || "uci" == t) {
