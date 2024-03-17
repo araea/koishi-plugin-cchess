@@ -5,6 +5,25 @@ import * as fs from 'fs';
 import {} from 'koishi-plugin-markdown-to-image-service'
 
 export const name = 'cchess-pikafish'
+export const usage = `## 🌈 使用
+
+- 建议自行添加别名，如 \`cc\` 等更方便的指令。
+- 请安装并启用所需服务，\`canvas\` 服务可使用 \`puppeteer\` 提供。
+- 支持使用中国象棋纵线和字母坐标进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+
+## 🌼 指令
+
+- \`cchess.退出\`: 退出当前游戏。
+- \`cchess.结束\`: 强制结束本局游戏。
+- \`cchess.认输\`: 认输结束本局游戏。
+- \`cchess.排行榜.总胜/输场\`: 请求悔棋操作。
+- \`cchess.开始.人人对战\`: 开始人人对战模式。
+- \`cchess.开始.人机对战\`: 开始人机对战模式。
+- \`cchess.悔棋.请求/同意/拒绝\`: 请求悔棋操作。
+- \`cchess.加入 [红/黑]\`: 加入游戏，可选红/黑方。
+- \`cchess.查看云库残局.DTM统计/DTC统计\`: 查看云库残局统计。
+- \`cchess.查询玩家记录 [@某人 或 不填则查自己]\`: 查询玩家记录。
+- \`cchess.编辑棋盘.导入/导出/使用方法\`: 导入/导出棋盘状态与fen使用方法。`
 export const inject = {
   required: ['monetary', 'database', 'puppeteer', 'canvas'],
   optional: ['markdownToImage'],
@@ -976,7 +995,34 @@ export function apply(ctx: Context, config: Config) {
       }
       return await getLeaderboard(session, 'lose', 'lose', '查看玩家总输场排行榜', number);
     });
-
+  // cx*
+  ctx.command('cchess.查询玩家记录 [targetUser:text]', '查询玩家记录')
+    .action(async ({session}, targetUser) => {
+      let {channelId, userId, username} = session
+      await updateNameInPlayerRecord(userId, username)
+      if (targetUser) {
+        const userIdRegex = /<at id="([^"]+)"(?: name="([^"]+)")?\/>/;
+        const match = targetUser.match(userIdRegex);
+        userId = match?.[1] ?? userId;
+        username = match?.[2] ?? username;
+      }
+      const targetUserRecord = await ctx.database.get('cchess_player_records', {userId})
+      if (targetUserRecord.length === 0) {
+        await ctx.database.create('cchess_player_records', {
+          userId,
+          username,
+          lose: 0,
+          win: 0,
+        })
+        return sendMessage(session, `【@${session.username}】\n查询对象：${username}
+无任何游戏记录。`)
+      }
+      const {win, lose} = targetUserRecord[0]
+      return sendMessage(session, `【@${session.username}】\n查询对象：${username}
+总胜场次数为：${win} 次
+总输场次数为：${lose} 次
+`)
+    });
   // hs*
   async function updatePlayerRecords(channelId, winSide, loseSide) {
     const winnerPlayerRecords = await ctx.database.get('cchess_gaming_player_records', {
