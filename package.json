@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-cchess-pikafish",
-  "description": "欢迎来到《中国象棋》游戏！支持人人对战和人机对战（皮卡鱼轻量版引擎），提供纵线和坐标方式操作，支持编辑棋盘、导入/导出FEN等功能。此外，还有丰富的棋盘和棋子皮肤可供选择，并配备排行榜系统。\uD83C\uDFAA",
-  "version": "0.0.2",
+  "description": "欢迎来到《中国象棋》游戏！支持人人对战和人机对战（皮卡鱼轻量版引擎），提供纵线和坐标方式操作，支持编辑棋盘、导入/导出FEN等功能。此外，还有丰富的棋盘和棋子皮肤可供选择，并配备排行榜系统。🎪",
+  "version": "0.0.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

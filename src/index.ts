@@ -551,7 +551,7 @@ export function apply(ctx: Context, config: Config) {
         }
 
         const board = gameRecord.board;
-        let selectedPos = undefined
+        let selectedPos = undefined;
         let newPos = undefined;
 
         // 中文纵线
@@ -1044,7 +1044,12 @@ export function apply(ctx: Context, config: Config) {
 
   async function checkEngine(channelId: string) {
     if (!engines[channelId]) {
+      await ctx.database.set('cchess_game_records', {channelId}, {
+        isEngineReady: false
+      })
+
       await initEngine(channelId);
+
       while (true) {
         const gameRecord = await getGameRecord(channelId);
         if (gameRecord.isEngineReady) {
@@ -1546,6 +1551,23 @@ export function apply(ctx: Context, config: Config) {
 
     // console.log(engines[channelId])
     // console.log(gameRecord.isEngineReady, null !== engines[channelId])
+
+    if (!engines[channelId]) {
+      await ctx.database.set('cchess_game_records', {channelId}, {
+        isEngineReady: false
+      })
+
+      await initEngine(channelId);
+
+      while (true) {
+        const gameRecord = await getGameRecord(channelId);
+        if (gameRecord.isEngineReady) {
+          break;
+        }
+        await sleep(500);
+      }
+    }
+
     if (null !== engines[channelId] || "uci" == t) {
       engines[channelId].send_command(t)
     } else {
