@@ -1,41 +1,41 @@
 const fs = require('fs');
 
 var Pikafish = (() => {
-  var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
+  var _scriptDir = __dirname;
 
   return (
     function (Pikafish) {
       Pikafish = Pikafish || {};
 
 
-// The Module object: Our interface to the outside world. We import
-// and export values on it. There are various ways Module can be used:
-// 1. Not defined. We create it here
-// 2. A function parameter, function(Module) { ..generated code.. }
-// 3. pre-run appended it, var Module = {}; ..generated code..
-// 4. External script tag defines var Module.
-// We need to check if Module already exists (e.g. case 3 above).
-// Substitution will be replaced with actual code on later stage of the build,
-// this way Closure Compiler will not mangle it (e.g. case 4. above).
-// Note that if you want to run closure, and also to use Module
-// after the generated code, you will need to define   var Module = {};
-// before the code. Then that object will be used in the code, and you
-// can continue to use Module afterwards as well.
+      // The Module object: Our interface to the outside world. We import
+      // and export values on it. There are various ways Module can be used:
+      // 1. Not defined. We create it here
+      // 2. A function parameter, function(Module) { ..generated code.. }
+      // 3. pre-run appended it, var Module = {}; ..generated code..
+      // 4. External script tag defines var Module.
+      // We need to check if Module already exists (e.g. case 3 above).
+      // Substitution will be replaced with actual code on later stage of the build,
+      // this way Closure Compiler will not mangle it (e.g. case 4. above).
+      // Note that if you want to run closure, and also to use Module
+      // after the generated code, you will need to define   var Module = {};
+      // before the code. Then that object will be used in the code, and you
+      // can continue to use Module afterwards as well.
       var Module = typeof Pikafish != 'undefined' ? Pikafish : {};
 
-// See https://caniuse.com/mdn-javascript_builtins_object_assign
+      // See https://caniuse.com/mdn-javascript_builtins_object_assign
 
-// See https://caniuse.com/mdn-javascript_builtins_bigint64array
+      // See https://caniuse.com/mdn-javascript_builtins_bigint64array
 
-// Set up the promise that indicates the Module is initialized
+      // Set up the promise that indicates the Module is initialized
       var readyPromiseResolve, readyPromiseReject;
       Module['ready'] = new Promise(function (resolve, reject) {
         readyPromiseResolve = resolve;
         readyPromiseReject = reject;
       });
 
-// --pre-jses are emitted after the Module integration code, so that they can
-// refer to Module (if they choose; they can also define Module)
+      // --pre-jses are emitted after the Module integration code, so that they can
+      // refer to Module (if they choose; they can also define Module)
 
       if (!Module.expectedDataFileDownloads) {
         Module.expectedDataFileDownloads = 0;
@@ -834,30 +834,30 @@ var Pikafish = (() => {
         throw e;
       }
 
-// {{MEM_INITIALIZER}}
+      // {{MEM_INITIALIZER}}
 
-// include: memoryprofiler.js
-
-
-// end include: memoryprofiler.js
-// include: URIUtils.js
+      // include: memoryprofiler.js
 
 
-// Prefix of data URIs emitted by SINGLE_FILE and related options.
+      // end include: memoryprofiler.js
+      // include: URIUtils.js
+
+
+      // Prefix of data URIs emitted by SINGLE_FILE and related options.
       var dataURIPrefix = 'data:application/octet-stream;base64,';
 
-// Indicates whether filename is a base64 data URI.
+      // Indicates whether filename is a base64 data URI.
       function isDataURI(filename) {
         // Prefix of data URIs emitted by SINGLE_FILE and related options.
         return filename.startsWith(dataURIPrefix);
       }
 
-// Indicates whether filename is delivered via file protocol (as opposed to http/https)
+      // Indicates whether filename is delivered via file protocol (as opposed to http/https)
       function isFileURI(filename) {
         return filename.startsWith('file://');
       }
 
-// end include: URIUtils.js
+      // end include: URIUtils.js
       var wasmBinaryFile;
       wasmBinaryFile = 'pikafish.wasm';
       if (!isDataURI(wasmBinaryFile)) {
@@ -904,8 +904,8 @@ var Pikafish = (() => {
         });
       }
 
-// Create the wasm instance.
-// Receives the wasm imports, returns the exports.
+      // Create the wasm instance.
+      // Receives the wasm imports, returns the exports.
       function createWasm() {
         // prepare imports
         var info = {
@@ -1001,11 +1001,11 @@ var Pikafish = (() => {
         return {}; // no exports yet; we'll fill them in later
       }
 
-// Globals used by JS i64 conversions (see makeSetValue)
+      // Globals used by JS i64 conversions (see makeSetValue)
       var tempDouble;
       var tempI64;
 
-// === Body ===
+      // === Body ===
 
       var ASM_CONSTS = {};
 

@@ -1,6 +1,6 @@
-# koishi-plugin-cchess-pikafish
+# koishi-plugin-cchess
 
-[![npm](https://img.shields.io/npm/v/koishi-plugin-cchess-pikafish?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-cchess-pikafish)
+[![npm](https://img.shields.io/npm/v/koishi-plugin-cchess?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-cchess)
 
 ## 🎐 简介
 
@@ -14,7 +14,7 @@
 
 - 建议自行添加别名，如 `cc` 等更方便的指令。
 - 请安装并启用所需服务，`canvas` 服务可使用 `puppeteer` 提供。
-- 支持使用中国象棋纵线和字母坐标进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+- 支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
 
 ## ⚙️ 配置项
 
@@ -36,6 +36,7 @@
 - `cchess.开始.人机对战`: 开始人机对战模式。
 - `cchess.悔棋.请求/同意/拒绝`: 请求悔棋操作。
 - `cchess.加入 [红/黑]`: 加入游戏，可选红/黑方。
+- `cchess.移动 [纵线/字母坐标]`: 通过指令移动棋子。
 - `cchess.查看云库残局.DTM统计/DTC统计`: 查看云库残局统计。
 - `cchess.查询玩家记录 [@某人 或 不填则查自己]`: 查询玩家记录。
 - `cchess.编辑棋盘.导入/导出/使用方法`: 导入/导出棋盘状态与fen使用方法。

@@ -4,12 +4,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 import {} from 'koishi-plugin-markdown-to-image-service'
 
-export const name = 'cchess-pikafish'
+export const name = 'cchess'
 export const usage = `## 🌈 使用
 
 - 建议自行添加别名，如 \`cc\` 等更方便的指令。
 - 请安装并启用所需服务，\`canvas\` 服务可使用 \`puppeteer\` 提供。
-- 支持使用中国象棋纵线和字母坐标进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+- 支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
 
 ## 🌼 指令
 
@@ -21,11 +21,13 @@ export const usage = `## 🌈 使用
 - \`cchess.开始.人机对战\`: 开始人机对战模式。
 - \`cchess.悔棋.请求/同意/拒绝\`: 请求悔棋操作。
 - \`cchess.加入 [红/黑]\`: 加入游戏，可选红/黑方。
+- \`cchess.移动 [纵线/字母坐标]\`: 通过指令移动棋子。
 - \`cchess.查看云库残局.DTM统计/DTC统计\`: 查看云库残局统计。
 - \`cchess.查询玩家记录 [@某人 或 不填则查自己]\`: 查询玩家记录。
 - \`cchess.编辑棋盘.导入/导出/使用方法\`: 导入/导出棋盘状态与fen使用方法。`
 export const inject = {
-  required: ['monetary', 'database', 'puppeteer', 'canvas'],
+  // required: ['monetary', 'database', 'puppeteer', 'canvas'],
+  required: ['database', 'puppeteer', 'canvas'],
   optional: ['markdownToImage'],
 }
 
@@ -43,7 +45,6 @@ export interface Config {
 }
 
 const pieceSkins: string[] = ["云库木制棋子", "刘炳森红黑牛角隶书棋子", "木制棋子", "本纹隶书棋子", "银灰将军体棋子", "棋弈无限红绿正棋子", "棋弈无限红绿棋子", "棋天大圣棋子", "棋者象棋棋子", "楷书玉石棋子", "水墨青瓷棋子", "牛皮纸华康金文棋子", "皮卡鱼棋子", "红蓝祥隶棋子", "红黑精典无阴影棋子", "红黑精典棋子", "行书玉石棋子", "象甲棋子", "金属棋子篆体棋子", "镌刻华彩棋子", "鹏飞红黑棋子", "鹏飞经典棋子", "鹏飞绿龙棋子", "龙腾四海棋子"];
-// const boardSkins: string[] = ['皮卡鱼棋盘', '木制棋盘', '玉石太极棋盘', '木制棋盘', '木制棋盘'];
 const boardSkins: string[] = ["棋弈无限红绿棋盘", "一鸣惊人棋盘", "三星堆棋盘", "云库木制棋盘", "云心鹤眼棋盘", "兰亭集序无字棋盘", "兰亭集序棋盘", "凤舞九天棋盘", "卯兔添福棋盘", "叱咤风云棋盘", "君临天下棋盘", "壁画古梦棋盘", "大闹天宫棋盘", "天山共色棋盘", "女神之约棋盘", "小吕飞刀棋盘", "山海绘卷棋盘", "护眼绿棋盘", "星河璀璨棋盘", "木制棋盘", "本纹隶书白棋盘", "本纹隶书黑棋盘", "桃花源记棋盘", "棋天大圣棋盘", "棋天无大圣棋盘", "武侠江湖棋盘", "水墨青瓷棋盘", "清悠茶道棋盘", "游园惊梦棋盘", "牛转乾坤棋盘", "玉石太极棋盘", "皓月无痕棋盘", "皮卡鱼棋盘", "盲棋神迹棋盘", "空城计棋盘", "竹波烟雨棋盘", "经典木棋盘棋盘", "绿色棋盘", "象甲2023棋盘", "象甲征程棋盘", "象甲重燃棋盘", "金牛降世棋盘", "金虎贺岁棋盘", "金虎贺岁（王天一签名版）棋盘", "鎏金岁月棋盘", "霸王别姬棋盘", "鸿门宴棋盘", "鹏飞红黑棋盘", "鹏飞经典棋盘", "鹏飞绿龙棋盘", "龙腾天坛棋盘"];
 export const Config: Schema<Config> = Schema.object({
   boardSkin: Schema.union(boardSkins).default('木制棋盘').description(`棋盘皮肤。`),
@@ -142,15 +143,22 @@ interface MoveInfo {
 }
 
 export function apply(ctx: Context, config: Config) {
+  const logger = ctx.logger('cchess')
   // cl*
   const engines: { [channelId: string]: any } = {};
   // fzy*
-  Object.values(engines).forEach((engine) => {
-    ctx.on('dispose', () => {
-      engine.terminate();
+
+  ctx.on('dispose', () => {
+    const channelIds = Object.keys(engines);
+
+    channelIds.forEach((channelId) => {
+      if (engines[channelId]) {
+        engines[channelId].send_command('quit');
+        engines[channelId] = null;
+      }
     });
   });
-  // console.log(engines["#"])
+
   const we = 54 // 棋子宽度
   const pe = 33
   const Pe = 33 // 棋盘边距
@@ -176,12 +184,6 @@ export function apply(ctx: Context, config: Config) {
     moveTime: 1,
     depth: config.defaultEngineThinkingDepth,
     enableHint: true,
-    // chessDB: {
-    //   query: !0,
-    //   autoMove: !0,
-    //   disablePly: 10,
-    //   alwaysUseEgtb: !0
-    // }
   }
 
   const piecesImgResources = loadPiecesImageResources(config.pieceSkin);
@@ -353,7 +355,7 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  // ksbz*
+  // ksbz* ks*
   ctx.command('cchess.开始', '开始游戏指令帮助')
     .action(async ({session}) => {
       await session.execute(`cchess.开始 -h`)
@@ -453,7 +455,6 @@ export function apply(ctx: Context, config: Config) {
             await ctx.database.set('cchess_game_records', {channelId}, {isEnginePlayBlack: true});
             AISide = '黑方';
             message += `人类队伍为：【红方】\n`;
-            // 遍历所有 blackPlayers，将他们的 side 设置为红方
             for (const player of blackPlayers) {
               await ctx.database.set('cchess_gaming_player_records', {
                 channelId,
@@ -464,7 +465,6 @@ export function apply(ctx: Context, config: Config) {
             await ctx.database.set('cchess_game_records', {channelId}, {isEnginePlayRed: true});
             AISide = '红方';
             message += `人类队伍为：【黑方】\n`;
-            // 遍历所有 redPlayers，将他们的 side 设置为黑方
             for (const player of redPlayers) {
               await ctx.database.set('cchess_gaming_player_records', {
                 channelId,
@@ -473,10 +473,8 @@ export function apply(ctx: Context, config: Config) {
             }
           }
           if (redPlayers.length === blackPlayers.length) {
-            // 如果人数相等，那么随机为所有人类分配队伍，然后为电脑分配队伍
             const side = Math.random() < 0.5 ? '红方' : '黑方';
             message += `人类队伍为：【${side}】\n`;
-            // 电脑为另一队，如果人类为红方，那么电脑为黑方，反之亦然
             const computerSide = side === '红方' ? '黑方' : '红方';
             AISide = computerSide;
             await ctx.database.set('cchess_game_records', {channelId}, {
@@ -532,7 +530,7 @@ export function apply(ctx: Context, config: Config) {
         return await sendMessage(session, `【@${username}】\n游戏未开始哦！\n完全没必要强制结束嘛~`);
       } else {
         await endGame(channelId);
-        return await sendMessage(session, `【@${username}】\n游戏已结束！`);
+        return await sendMessage(session, `【@${username}】\n游戏已被强制结束！`);
       }
     })
 
@@ -1023,6 +1021,7 @@ export function apply(ctx: Context, config: Config) {
 总输场次数为：${lose} 次
 `)
     });
+
   // hs*
   async function updatePlayerRecords(channelId, winSide, loseSide) {
     const winnerPlayerRecords = await ctx.database.get('cchess_gaming_player_records', {
@@ -1319,7 +1318,6 @@ export function apply(ctx: Context, config: Config) {
       board,
       turn
     } = gameRecord;
-    // console.log(t)
     if (!t) {
       await ctx.database.set('cchess_game_records', {channelId}, {
         isAnalyzing: false
@@ -1336,7 +1334,6 @@ export function apply(ctx: Context, config: Config) {
       return;
     }
     let i = getSideByMoveString(board, t);
-    // console.log(i);
     if (i !== turn && isEnginePlayRed || i !== turn && isEnginePlayBlack) {
       await ctx.database.set('cchess_game_records', {channelId}, {
         winSide: turn,
@@ -1345,13 +1342,7 @@ export function apply(ctx: Context, config: Config) {
       });
       return;
     }
-    // console.log('red', isEnginePlayRed);
-    // console.log('b', isEnginePlayBlack);
     ("w" === i && isEnginePlayRed || "b" === i && isEnginePlayBlack) && (await makeMoveByString(channelId, t)
-      // "fen" in $route.params && $router.push({
-      //   path: "/"
-      // }),
-      // bestMoveHint = {}
     )
 
     await ctx.database.set('cchess_game_records', {channelId}, {
@@ -1456,7 +1447,6 @@ export function apply(ctx: Context, config: Config) {
 //     try {
 //       engineSettings.MultiPV > 1 ? e["pv"] = getSerialMoveName(channelId, getFen(gameRecord.board, gameRecord.turn), e["pv"].split(" ").slice(0, 4)) : e["pv"] = getSerialMoveName(channelId, getFen(gameRecord.board, gameRecord.turn), e["pv"].split(" "))
 //     } catch (i) {
-//       console.log(i)
 //     }
 //     if (engineSettings.MultiPV > 1) {
 //       if (multiPvInfoBuffer[t] = e,
@@ -1517,7 +1507,6 @@ export function apply(ctx: Context, config: Config) {
       turnAfterLastEat,
       // multiPvInfoBuffer
     } = gameRecord;
-    // console.log(isEnginePlayRed, turn, isEnginePlayBlack)
     // if (isEnginePlayRed && "w" === turn || isEnginePlayBlack && "b" === turn) {
     await sendCommand(channelId, "fen " + getFenWithMove(movesAfterLastEat, boardAfterLastEat, turnAfterLastEat)),
       // multiPvInfoBuffer = {},
@@ -1560,7 +1549,6 @@ export function apply(ctx: Context, config: Config) {
 
   async function makeMoveByString(channelId, t) {
     let e = moveStringToPos(t);
-    // console.log(e[0], e[1])
     await makeMove(channelId, e[0], e[1])
   }
 
@@ -1590,11 +1578,7 @@ export function apply(ctx: Context, config: Config) {
 
 // zl*
   async function sendCommand(channelId, t) {
-    // console.log(" < " + t);
     const gameRecord = await getGameRecord(channelId);
-
-    // console.log(engines[channelId])
-    // console.log(gameRecord.isEngineReady, null !== engines[channelId])
 
     await checkEngine(channelId);
     if (engines[channelId] && !gameRecord.isEngineReady) {
@@ -1606,26 +1590,13 @@ export function apply(ctx: Context, config: Config) {
     if (null !== engines[channelId] || "uci" == t) {
       engines[channelId].send_command(t)
     } else {
-      // await sleep(300)
-      // await sendCommand(channelId, t);
-      // console.log('指令发送失败！')
+      await sendCommand(channelId, t);
     }
   }
 
 // sc*
   async function receiveOutput(channelId, t) {
-    // const gameRecord = await getGameRecord(channelId);
-    // let {
-    //   // engineInfoEvent,
-    //   // BestmoveEvent,
-    //   // UCIOKEvent,
-    //   isAnalyzing,
-    //   // lastPV,
-    //   isEngineReady
-    // } = gameRecord;
     try {
-      // console.log(" > " + t);
-
       if (!t) return;
 
       let e = t.split(" ");
@@ -1675,23 +1646,14 @@ export function apply(ctx: Context, config: Config) {
           await onEngineBestMove(channelId, e[1], null);
         }
       } else if (i === "option" || i === "uciok") {
-        // if (UCIOKEvent !== null) {
-        //   UCIOKEvent();
-        // }
         // await ctx.database.set('cchess_game_records', {channelId}, {isEngineReady: true})
       }
     } catch (error) {
-      console.error(error);
+      logger.error(error);
     }
-
-    // await ctx.database.set('cchess_game_records', {channelId}, {
-    //   isAnalyzing,
-    //   lastPV,
-    //   isEngineReady
-    // })
   }
 
-  function engineMessageHandler(channelId, message) {
+  async function engineMessageHandler(channelId, message) {
     const {command, wasmType, origin} = message;
 
     if (!engines[channelId]) {
@@ -1707,7 +1669,7 @@ export function apply(ctx: Context, config: Config) {
 
       const Pikafish = require(wasmScriptPath);
 
-      Pikafish({
+      const instance = await Pikafish({
         locateFile: (file) => {
           if (file === "pikafish.data") {
             return path.join(wasmOrigin, 'assets', 'wasm', 'data', file);
@@ -1716,32 +1678,29 @@ export function apply(ctx: Context, config: Config) {
           }
         },
         setStatus: (status) => {
-          // console.log(status);
         }
-      }).then(async (instance) => {
-        engines[channelId] = instance;
-        engines[channelId].read_stdout = async (stdout) => {
-          // 处理接收到的输出
-          await receiveOutput(channelId, stdout);
-        };
-        // isReady
-        await ctx.database.set('cchess_game_records', {channelId}, {isEngineReady: true})
-        await sleep(100)
-        // 发送命令 "uci"
-        await sendCommand(channelId, "uci");
-        await sleep(100)
-        // 设置选项
-        await setOptionList(channelId, engineSettings);
-        // await sleep(500)
-        // await sendCommand(channelId, "fen rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w moves a0a1");
-        // await sleep(500)
-        // await sendCommand(channelId, "go depth 60");
       });
+
+      engines[channelId] = instance;
+      engines[channelId].read_stdout = async (stdout) => {
+        // 处理接收到的输出
+        await receiveOutput(channelId, stdout);
+      };
+
+      // isReady
+      await ctx.database.set('cchess_game_records', {channelId}, {isEngineReady: true})
+      await sleep(100)
+      // 发送命令 "uci"
+      await sendCommand(channelId, "uci");
+      await sleep(100)
+      // 设置选项
+      await setOptionList(channelId, engineSettings);
     }
   }
 
+
   async function initEngine(channelId) {
-    engineMessageHandler(channelId, {command: undefined, wasmType: 'single', origin: __dirname});
+    await engineMessageHandler(channelId, {command: undefined, wasmType: 'single', origin: __dirname});
   }
 
   function findMoveInfo(moveInfoList: MoveInfo[], moveOperation: string): MoveInfo | undefined {
