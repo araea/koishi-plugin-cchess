@@ -14,17 +14,19 @@
 
 - 建议自行添加别名，如 `cc` 等更方便的指令。
 - 请安装并启用所需服务，`canvas` 服务可使用 `puppeteer` 提供。
-- 支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+-
+支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
 
 ## ⚙️ 配置项
 
-- `boardSkin`: 棋盘皮肤，可选值有：木制棋盘、玉石太极棋盘等数十种精美皮肤。
-- `pieceSkin`: 棋子皮肤，可选值有：红黑棋子、隶书棋子等数十种不同风格。
-- `defaultEngineThinkingDepth`: 默认 AI 思考深度，数值越大棋力越强，但耗费资源也更多。
-- `retractDelay`: 自动撤回等待时间（秒），设为0则不自动撤回。
 - `imageType`: 发送图片类型，可选 `png/jpeg/webp`。
+- `retractDelay`: 自动撤回等待时间（秒），设为0则不自动撤回。
+- `pieceSkin`: 棋子皮肤，可选值有：红黑棋子、隶书棋子等数十种不同风格。
 - `isTextToImageConversionEnabled`: 是否开启文字转图片功能（可选）。
+- `boardSkin`: 棋盘皮肤，可选值有：木制棋盘、玉石太极棋盘等数十种精美皮肤。
+- `defaultEngineThinkingDepth`: 默认 AI 思考深度，数值越大棋力越强，但耗费资源也更多。
 - `isChessImageWithOutlineEnabled`：是否为象棋图片添加辅助外框，关闭后可以显著提升图片速度，但无辅助外框，玩起来可能会比较累。
+- `allowFreePieceMovementInHumanMachineMode`: 是否允许在人机模式下自由移动棋子，开启后可以不需要加入游戏直接开始玩人机模式。
 
 ## 🌼 指令
 
@@ -43,11 +45,11 @@
 
 ## 🍧 致谢
 
-- [Koishi](https://koishi.chat/) - 出色的机器人框架 🤖
 - [风满楼]() - 提供棋盘与棋子素材 🎨
+- [Koishi](https://koishi.chat/) - 出色的机器人框架 🤖
 - [皮卡鱼网页版](https://xiangqiai.com/#/) - 强大的象棋引擎 🐟
-- [中国象棋电脑应用规范](https://www.xqbase.com/protocol/cchess_intro.htm) - 遵循标准规范 📜
 - [中国象棋云库查询](https://www.chessdb.cn/query/) - 囊括海量棋谱 📖
+- [中国象棋电脑应用规范](https://www.xqbase.com/protocol/cchess_intro.htm) - 遵循标准规范 📜
 
 ## ✨ License
 

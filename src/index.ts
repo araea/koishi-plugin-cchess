@@ -37,6 +37,7 @@ export interface Config {
   pieceSkin: string
   defaultEngineThinkingDepth: number
 
+  allowFreePieceMovementInHumanMachineMode: boolean
   defaultMaxLeaderboardEntries: number
   retractDelay: number
   isChessImageWithOutlineEnabled: boolean
@@ -49,6 +50,7 @@ const boardSkins: string[] = ["棋弈无限红绿棋盘", "一鸣惊人棋盘", 
 export const Config: Schema<Config> = Schema.object({
   boardSkin: Schema.union(boardSkins).default('木制棋盘').description(`棋盘皮肤。`),
   pieceSkin: Schema.union(pieceSkins).default('木制棋子').description(`棋子皮肤。`),
+  allowFreePieceMovementInHumanMachineMode: Schema.boolean().default(false).description(` 是否允许在人机模式下自由移动棋子，开启后可以不需要加入游戏直接开始玩人机模式。`),
   defaultEngineThinkingDepth: Schema.number().min(0).max(100).default(10).description(`默认引擎思考深度，越高 AI 棋力越强。由于 Nodejs 不支持 SIMD，所以不建议设置过高。`),
   defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`显示排行榜时默认的最大人数。`),
   retractDelay: Schema.number().min(0).default(0).description(`自动撤回等待的时间，单位是秒。值为 0 时不启用自动撤回功能。`),
@@ -261,15 +263,26 @@ export function apply(ctx: Context, config: Config) {
 
   // zjj*
   ctx.middleware(async (session, next) => {
-    let {channelId, content, userId} = session;
+    let {channelId, content, userId, username} = session;
     const gameRecord = await getGameRecord(channelId);
     if (!gameRecord.isStarted) {
       return await next();
     }
-    const playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
-    if (playerRecord.length === 0) {
-      return await next();
-    } else {
+    let playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+    if (playerRecord.length === 0 && !config.allowFreePieceMovementInHumanMachineMode) {
+      if (!(gameRecord.isEnginePlayRed || gameRecord.isEnginePlayBlack)) {
+        return await next();
+      } else {
+        if (gameRecord.isEnginePlayRed) {
+          await ctx.database.create('cchess_gaming_player_records', {channelId, userId, username, side: '黑方'})
+          playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+        } else if (gameRecord.isEnginePlayBlack) {
+          await ctx.database.create('cchess_gaming_player_records', {channelId, userId, username, side: '红方'})
+          playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+        }
+      }
+    }
+    if (playerRecord.length !== 0) {
       const turn = gameRecord.turn;
       const sideString = turn === 'w' ? '红方' : '黑方';
       if (playerRecord[0].side !== sideString) {
@@ -437,7 +450,7 @@ export function apply(ctx: Context, config: Config) {
       let blackPlayers = getPlayerRecords.filter((player) => player.side === '黑方');
       let message = '';
       let AISide = '';
-      if (playersNum < 1) {
+      if (playersNum < 1 && !config.allowFreePieceMovementInHumanMachineMode) {
         return await sendMessage(session, `【@${username}】\n当前玩家人数不足 1 人，无法开始游戏！`);
       } else {
         if (playersNum === 1) {
@@ -551,10 +564,22 @@ export function apply(ctx: Context, config: Config) {
         }
         const turn = gameRecord.turn;
         const sideString = convertTurnToString(turn);
-        const playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+        let playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
         if (playerRecord.length === 0) {
-          return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
-        } else if (playerRecord[0].side !== sideString) {
+          if (config.allowFreePieceMovementInHumanMachineMode) {
+            if (gameRecord.isEnginePlayRed) {
+              await ctx.database.create('cchess_gaming_player_records', {channelId, userId, username, side: '黑方'})
+              playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+            } else if (gameRecord.isEnginePlayBlack) {
+              await ctx.database.create('cchess_gaming_player_records', {channelId, userId, username, side: '红方'})
+              playerRecord = await ctx.database.get('cchess_gaming_player_records', {channelId, userId});
+            }
+          } else {
+            return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
+          }
+        }
+
+        if (playerRecord[0].side !== sideString) {
           return await sendMessage(session, `【@${username}】\n还没轮到${sideString}走棋哦！\n当前走棋方为：【${convertTurnToString(gameRecord.turn)}】`);
         }
 
