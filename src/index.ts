@@ -41,6 +41,7 @@ export interface Config {
   defaultMaxLeaderboardEntries: number
   retractDelay: number
   isChessImageWithOutlineEnabled: boolean
+  imgScale: number
   imageType: "png" | "jpeg" | "webp"
   isTextToImageConversionEnabled: boolean
 }
@@ -54,6 +55,7 @@ export const Config: Schema<Config> = Schema.object({
   defaultEngineThinkingDepth: Schema.number().min(0).max(100).default(10).description(`默认引擎思考深度，越高 AI 棋力越强。由于 Nodejs 不支持 SIMD，所以不建议设置过高。`),
   defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`显示排行榜时默认的最大人数。`),
   retractDelay: Schema.number().min(0).default(0).description(`自动撤回等待的时间，单位是秒。值为 0 时不启用自动撤回功能。`),
+  imgScale: Schema.number().min(1).default(1).description(`图片分辨率倍率。`),
   imageType: Schema.union(['png', 'jpeg', 'webp']).default('png').description(`发送的图片类型。`),
   isTextToImageConversionEnabled: Schema.boolean().default(false).description(`是否开启将文本转为图片的功能（可选），如需启用，需要启用 \`markdownToImage\` 服务。`),
   isChessImageWithOutlineEnabled: Schema.boolean().default(true).description(`是否为象棋图片添加辅助外框，关闭后可以显著提升图片速度，但无辅助外框，玩起来可能会比较累。`),
@@ -173,7 +175,7 @@ export function apply(ctx: Context, config: Config) {
 
   const weight = 500
   const height = 550
-  const scale = 2
+  const scale = config.imgScale
   const isFlipBoard = false
   const engineSettings = {
     Threads: 1,
@@ -1828,14 +1830,14 @@ export function apply(ctx: Context, config: Config) {
   }
 
   async function createImage(buffer: Buffer): Promise<Buffer> {
-    const canvas = await ctx.canvas.createCanvas(1240, 1560);
+    const canvas = await ctx.canvas.createCanvas(620 * scale, 780 * scale);
     const context = canvas.getContext('2d');
 
     const outerFrame = await ctx.canvas.loadImage(outerFrameImg);
-    context.drawImage(outerFrame, 0, 0, 1240, 1560);
+    context.drawImage(outerFrame, 0, 0, 620 * scale, 780 * scale);
 
     const boardImg = await ctx.canvas.loadImage(buffer);
-    context.drawImage(boardImg, 73, 180, 1100, 1210);
+    context.drawImage(boardImg, 36.5 * scale, 90 * scale, 550 * scale, 605 * scale);
 
     return canvas.toBuffer('image/png');
   }
