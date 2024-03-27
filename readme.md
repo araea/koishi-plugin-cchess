@@ -14,8 +14,7 @@
 
 - 建议自行添加别名，如 `cc` 等更方便的指令。
 - 请安装并启用所需服务，`canvas` 服务可使用 `puppeteer` 提供。
--
-支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+- 支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
 
 ## ⚙️ 配置项
 
