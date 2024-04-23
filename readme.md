@@ -50,10 +50,14 @@
 - [中国象棋云库查询](https://www.chessdb.cn/query/) - 囊括海量棋谱 📖
 - [中国象棋电脑应用规范](https://www.xqbase.com/protocol/cchess_intro.htm) - 遵循标准规范 📜
 
+## 🐱 QQ 群
+
+- 956758505
+
 ## ✨ License
 
-MIT License © 2024 💫
+MIT License © 2024
 
-希望您喜欢这款插件！
+希望您喜欢这款插件！ 💫
 
 如有任何问题或建议，欢迎联系我哈~ 🎈
