@@ -5,28 +5,19 @@ import * as fs from 'fs';
 import {} from 'koishi-plugin-markdown-to-image-service'
 
 export const name = 'cchess'
-export const usage = `## 🌈 使用
+export const usage = `## 使用
 
-- 建议自行添加别名，如 \`cc\` 等更方便的指令。
-- 请安装并启用所需服务，\`canvas\` 服务可使用 \`puppeteer\` 提供。
-- 支持使用中国象棋纵线（炮二平五/炮8平5）和字母坐标（a0a1）进行移动。[了解详情 - 中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)
+1. 安装 \`puppeteer\` 服务。
+2. 设置指令别名。
 
-## 🌼 指令
+## Q&A
 
-- \`cchess.退出\`: 退出当前游戏。
-- \`cchess.结束\`: 强制结束本局游戏。
-- \`cchess.认输\`: 认输结束本局游戏。
-- \`cchess.排行榜.总胜/输场\`: 请求悔棋操作。
-- \`cchess.开始.人人对战\`: 开始人人对战模式。
-- \`cchess.开始.人机对战\`: 开始人机对战模式。
-- \`cchess.悔棋.请求/同意/拒绝\`: 请求悔棋操作。
-- \`cchess.加入 [红/黑]\`: 加入游戏，可选红/黑方。
-- \`cchess.移动 [纵线/字母坐标]\`: 通过指令移动棋子。
-- \`cchess.查看云库残局.DTM统计/DTC统计\`: 查看云库残局统计。
-- \`cchess.查询玩家记录 [@某人 或 不填则查自己]\`: 查询玩家记录。
-- \`cchess.编辑棋盘.导入/导出/使用方法\`: 导入/导出棋盘状态与fen使用方法。
+1. 如何移动棋子？
 
-## 🐱 QQ 群
+- 纵线（炮二平五/炮8平5）或字母坐标（a0a1）。
+- 详见 [中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)。
+
+## QQ 群
 
 - 956758505`
 
