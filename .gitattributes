@@ -5,3 +5,8 @@
 *.ico -text
 *.gif -text
 *.webp -text
+
+# wasm directory files
+src/assets/wasm/*.js text eol=lf
+src/assets/wasm/*.wasm -text
+src/assets/wasm/data/* -text

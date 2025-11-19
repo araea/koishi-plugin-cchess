@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-cchess",
   "description": "Koishi 的中国象棋插件。支持人人/人机对战。",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -20,7 +20,7 @@
       ]
     }
   },
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "author": "Nawyjx <3373167460@qq.com>",
   "homepage": "https://www.npmjs.com/package/koishi-plugin-cchess?activeTab=readme",
   "repository": {
@@ -45,7 +45,7 @@
     "对战"
   ],
   "peerDependencies": {
-    "koishi": "^4.18.0"
+    "koishi": "^4.18.9"
   },
   "devDependencies": {
     "koishi-plugin-markdown-to-image-service": "^1.2.1",
