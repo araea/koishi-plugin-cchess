@@ -2,7 +2,6 @@ import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
 import * as path from 'path';
 import * as fs from 'fs';
-import { } from 'koishi-plugin-markdown-to-image-service'
 
 export const name = 'cchess'
 
@@ -22,10 +21,7 @@ export const usage = `## 使用
 
 - 956758505`
 
-export const inject = {
-  required: ['database', 'puppeteer', 'canvas'],
-  optional: ['markdownToImage'],
-}
+export const inject = ['database', 'puppeteer', 'canvas']
 
 export interface Config {
   boardSkin: string
@@ -37,7 +33,6 @@ export interface Config {
   isChessImageWithOutlineEnabled: boolean
   imgScale: number
   imageType: "png" | "jpeg" | "webp"
-  isTextToImageConversionEnabled: boolean
 }
 
 const pieceSkins: string[] = ["棋弈无限图形棋子", "云库木制棋子", "刘炳森红黑牛角隶书棋子", "木制棋子", "本纹隶书棋子", "银灰将军体棋子", "棋弈无限红绿正棋子", "棋弈无限红绿棋子", "棋天大圣棋子", "棋者象棋棋子", "楷书玉石棋子", "水墨青瓷棋子", "牛皮纸华康金文棋子", "皮卡鱼棋子", "红蓝祥隶棋子", "红黑精典无阴影棋子", "红黑精典棋子", "行书玉石棋子", "象甲棋子", "金属棋子篆体棋子", "镌刻华彩棋子", "鹏飞红黑棋子", "鹏飞经典棋子", "鹏飞绿龙棋子", "龙腾四海棋子"];
@@ -52,7 +47,6 @@ export const Config: Schema<Config> = Schema.object({
   retractDelay: Schema.number().min(0).default(0).description(`自动撤回等待的时间，单位是秒。值为 0 时不启用自动撤回功能。`),
   imgScale: Schema.number().min(1).default(1).description(`图片分辨率倍率。`),
   imageType: Schema.union(['png', 'jpeg', 'webp']).default('png').description(`发送的图片类型。`),
-  isTextToImageConversionEnabled: Schema.boolean().default(false).description(`是否开启将文本转为图片的功能（可选），如需启用，需要启用 \`markdownToImage\` 服务。`),
   isChessImageWithOutlineEnabled: Schema.boolean().default(true).description(`是否为象棋图片添加辅助外框，关闭后可以显著提升图片速度，但无辅助外框，玩起来可能会比较累。`),
 }) as any
 
@@ -295,7 +289,7 @@ export function apply(ctx: Context, config: Config) {
       if (gameRecord.isStarted) {
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `**【@${username}】**\n游戏已经开始啦！\n${hImg}`);
+        return await sendMessage(session, `【@${username}】\n游戏已经开始啦！\n${hImg}`);
       }
       await checkEngine(channelId);
       if (engines[channelId] && !gameRecord.isEngineReady) {
@@ -304,7 +298,7 @@ export function apply(ctx: Context, config: Config) {
       if (!choice) {
         choice = Math.random() < 0.5 ? '红方' : '黑方';
       } else if (choice.includes('红') && choice.includes('黑')) {
-        return await sendMessage(session, `**【@${username}】**\n一次只能选择一方哦！`);
+        return await sendMessage(session, `【@${username}】\n一次只能选择一方哦！`);
       } else if (choice.includes('红')) {
         choice = '红方';
       } else if (choice.includes('黑')) {
@@ -318,10 +312,10 @@ export function apply(ctx: Context, config: Config) {
       const playersNum = getPlayerRecords.length;
       if (getPlayerRecord.length === 0) {
         await ctx.database.create('cchess_gaming_player_records', { channelId, userId, username, side: choice });
-        return await sendMessage(session, `**【@${username}】**\n您加入游戏啦！\n您的队伍为：**【${choice}】**\n当前玩家人数为：**【${playersNum + 1}】**\n带“黑”或“红”加入游戏可以更换队伍哦~\n例如：\n- 加入指令 红\n- 加入指令 黑`);
+        return await sendMessage(session, `【@${username}】\n您加入游戏啦！\n您的队伍为：【${choice}】\n当前玩家人数为：【${playersNum + 1}】\n带“黑”或“红”加入游戏可以更换队伍哦~\n例如：\n- 加入指令 红\n- 加入指令 黑`);
       } else {
         await ctx.database.set('cchess_gaming_player_records', { channelId, userId }, { side: choice });
-        return await sendMessage(session, `**【@${username}】**\n您已更换队伍为：**【${choice}】**\n当前玩家人数为：**【${playersNum}】**`);
+        return await sendMessage(session, `【@${username}】\n您已更换队伍为：【${choice}】\n当前玩家人数为：【${playersNum}】`);
       }
     })
 
@@ -331,17 +325,17 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏已经开始啦~\n不许逃跑哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏已经开始啦~\n不许逃跑哦！`);
       }
       await checkEngine(channelId);
       const getPlayerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
       const getPlayerRecords = await ctx.database.get('cchess_gaming_player_records', { channelId })
       const playersNum = getPlayerRecords.length;
       if (getPlayerRecord.length === 0) {
-        return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+        return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
       } else {
         await ctx.database.remove('cchess_gaming_player_records', { channelId, userId });
-        return await sendMessage(session, `**【@${username}】**\n您已退出游戏！\n剩余玩家人数为：**【${playersNum - 1}】**`);
+        return await sendMessage(session, `【@${username}】\n您已退出游戏！\n剩余玩家人数为：【${playersNum - 1}】`);
       }
     })
 
@@ -358,7 +352,7 @@ export function apply(ctx: Context, config: Config) {
       const gameRecord = await getGameRecord(channelId);
 
       if (gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏已经开始啦！`);
+        return await sendMessage(session, `【@${username}】\n游戏已经开始啦！`);
       }
       await checkEngine(channelId);
       const getPlayerRecords = await ctx.database.get('cchess_gaming_player_records', { channelId })
@@ -367,16 +361,16 @@ export function apply(ctx: Context, config: Config) {
       let blackPlayers = getPlayerRecords.filter((player) => player.side === '黑方');
       let message = '';
       if (playersNum < 2) {
-        return await sendMessage(session, `**【@${username}】**\n当前玩家人数不足 2 人，无法开始游戏！`);
+        return await sendMessage(session, `【@${username}】\n当前玩家人数不足 2 人，无法开始游戏！`);
       } else {
         if (redPlayers.length !== 1 || blackPlayers.length !== 1) {
           const randomPlayer = getPlayerRecords[Math.floor(Math.random() * getPlayerRecords.length)];
           if (redPlayers.length < 1) {
             randomPlayer.side = '红方';
-            message += `**【@${randomPlayer.username}】**被自动分配到红方。\n`;
+            message += `【@${randomPlayer.username}】被自动分配到红方。\n`;
           } else {
             randomPlayer.side = '黑方';
-            message += `**【@${randomPlayer.username}】**被自动分配到黑方。\n`;
+            message += `【@${randomPlayer.username}】被自动分配到黑方。\n`;
           }
           await ctx.database.set('cchess_gaming_player_records', {
             channelId,
@@ -385,14 +379,14 @@ export function apply(ctx: Context, config: Config) {
           redPlayers = getPlayerRecords.filter((player) => player.side === '红方');
           blackPlayers = getPlayerRecords.filter((player) => player.side === '黑方');
         }
-        message += `红方玩家（${redPlayers.length}）：\n${redPlayers.map(player => `**【@${player.username}】**`).join('\n')}\n\n`;
-        message += `黑方玩家（${blackPlayers.length}）：\n${blackPlayers.map(player => `**【@${player.username}】**`).join('\n')}`;
+        message += `红方玩家（${redPlayers.length}）：\n${redPlayers.map(player => `【@${player.username}】`).join('\n')}\n\n`;
+        message += `黑方玩家（${blackPlayers.length}）：\n${blackPlayers.map(player => `【@${player.username}】`).join('\n')}`;
         await ctx.database.set('cchess_game_records', { channelId }, { isStarted: true })
         const turn = gameRecord.turn;
         const sideString = convertTurnToString(turn);
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `### 游戏开始！\n${message}\n先手方为：**【${sideString}】**\n${hImg}`);
+        return await sendMessage(session, `### 游戏开始！\n${message}\n先手方为：【${sideString}】\n${hImg}`);
       }
     })
 
@@ -403,7 +397,7 @@ export function apply(ctx: Context, config: Config) {
       const gameRecord = await getGameRecord(channelId);
 
       if (gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏已经开始啦！`);
+        return await sendMessage(session, `【@${username}】\n游戏已经开始啦！`);
       }
       await checkEngine(channelId);
 
@@ -414,37 +408,37 @@ export function apply(ctx: Context, config: Config) {
       let message = '';
       let AISide = '';
       if (playersNum < 1 && !config.allowFreePieceMovementInHumanMachineMode) {
-        return await sendMessage(session, `**【@${username}】**\n当前玩家人数不足 1 人，无法开始游戏！`);
+        return await sendMessage(session, `【@${username}】\n当前玩家人数不足 1 人，无法开始游戏！`);
       } else {
         if (playersNum === 1) {
           if (getPlayerRecords[0].side === '红方') {
             await ctx.database.set('cchess_game_records', { channelId }, { isEnginePlayBlack: true });
             AISide = '黑方';
-            message += `人类队伍为：**【红方】**\n`;
+            message += `人类队伍为：【红方】\n`;
           } else {
             await ctx.database.set('cchess_game_records', { channelId }, { isEnginePlayRed: true });
             AISide = '红方';
-            message += `人类队伍为：**【黑方】**\n`;
+            message += `人类队伍为：【黑方】\n`;
           }
         } else {
           if (redPlayers.length > blackPlayers.length) {
             await ctx.database.set('cchess_game_records', { channelId }, { isEnginePlayBlack: true });
             AISide = '黑方';
-            message += `人类队伍为：**【红方】**\n`;
+            message += `人类队伍为：【红方】\n`;
             for (const player of blackPlayers) {
               await ctx.database.set('cchess_gaming_player_records', { channelId, userId: player.userId }, { side: '红方' });
             }
           } else if (redPlayers.length < blackPlayers.length) {
             await ctx.database.set('cchess_game_records', { channelId }, { isEnginePlayRed: true });
             AISide = '红方';
-            message += `人类队伍为：**【黑方】**\n`;
+            message += `人类队伍为：【黑方】\n`;
             for (const player of redPlayers) {
               await ctx.database.set('cchess_gaming_player_records', { channelId, userId: player.userId }, { side: '黑方' });
             }
           }
           if (redPlayers.length === blackPlayers.length) {
             const side = Math.random() < 0.5 ? '红方' : '黑方';
-            message += `人类队伍为：**【${side}】**\n`;
+            message += `人类队伍为：【${side}】\n`;
             const computerSide = side === '红方' ? '黑方' : '红方';
             AISide = computerSide;
             await ctx.database.set('cchess_game_records', { channelId }, {
@@ -474,7 +468,7 @@ export function apply(ctx: Context, config: Config) {
 
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `### 游戏开始！\n${message}\n先手方为：**【${sideString}】**\n${hImg}`);
+        return await sendMessage(session, `### 游戏开始！\n${message}\n先手方为：【${sideString}】\n${hImg}`);
       }
     })
 
@@ -486,10 +480,10 @@ export function apply(ctx: Context, config: Config) {
       await checkEngine(channelId);
 
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏未开始哦！\n完全没必要强制结束嘛~`);
+        return await sendMessage(session, `【@${username}】\n游戏未开始哦！\n完全没必要强制结束嘛~`);
       } else {
         await endGame(channelId);
-        return await sendMessage(session, `**【@${username}】**\n游戏已被强制结束！`);
+        return await sendMessage(session, `【@${username}】\n游戏已被强制结束！`);
       }
     })
 
@@ -498,14 +492,14 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
       if (!isMoveString(moveOperation) && !isValidFigureMoveName(moveOperation)) {
-        return await sendMessage(session, `**【@${username}】**\n无效的移动！`);
+        return await sendMessage(session, `【@${username}】\n无效的移动！`);
       }
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       if (gameRecord.isRegretRequest) {
-        return await sendMessage(session, `**【@${username}】**\n正在请求悔棋，等待回应中...`);
+        return await sendMessage(session, `【@${username}】\n正在请求悔棋，等待回应中...`);
       }
       const turn = gameRecord.turn;
       const sideString = convertTurnToString(turn);
@@ -521,12 +515,12 @@ export function apply(ctx: Context, config: Config) {
              playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
           }
         } else {
-          return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+          return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
         }
       }
 
       if (playerRecord.length === 0 || playerRecord[0].side !== sideString) {
-        return await sendMessage(session, `**【@${username}】**\n还没轮到${sideString}走棋哦！\n当前走棋方为：**【${convertTurnToString(gameRecord.turn)}】**`);
+        return await sendMessage(session, `【@${username}】\n还没轮到${sideString}走棋哦！\n当前走棋方为：【${convertTurnToString(gameRecord.turn)}】`);
       }
 
       await checkEngine(channelId);
@@ -561,7 +555,7 @@ export function apply(ctx: Context, config: Config) {
         }
         const duplicateMoveInfo = findMoveInfo(moveInfoList, moveOperation);
         if (!duplicateMoveInfo) {
-          return await sendMessage(session, `**【@${username}】**\n无效的移动！`);
+          return await sendMessage(session, `【@${username}】\n无效的移动！`);
         } else {
           [selectedPos, newPos] = duplicateMoveInfo.moveCord;
         }
@@ -575,11 +569,11 @@ export function apply(ctx: Context, config: Config) {
       const side = getSide(piece);
       const type = getType(piece);
       if (side !== gameRecord.turn) {
-        return await sendMessage(session, `**【@${username}】**\n还没轮到${convertTurnToString(side)}走棋哦！\n当前走棋方为：**【${convertTurnToString(gameRecord.turn)}】**`);
+        return await sendMessage(session, `【@${username}】\n还没轮到${convertTurnToString(side)}走棋哦！\n当前走棋方为：【${convertTurnToString(gameRecord.turn)}】`);
       }
       const moveMap = getValidMoveMap(board, type, side, selectedPos);
       if (moveMap[newRow][newCol] !== 'go' && moveMap[newRow][newCol] !== 'eat') {
-        return await sendMessage(session, `**【@${username}】**\n无效的移动！`);
+        return await sendMessage(session, `【@${username}】\n无效的移动！`);
       }
 
       await makeMove(channelId, selectedPos, newPos);
@@ -599,7 +593,7 @@ export function apply(ctx: Context, config: Config) {
         const hImg = h.image(buffer, `image/${config.imageType}`)
         await updatePlayerRecords(channelId, newGameRecord.winSide, newGameRecord.loseSide);
         await endGame(channelId);
-        return await sendMessage(session, `**【@${username}】**\n### 绝杀！\n游戏结束！\n获胜方为：**【${convertTurnToString(newGameRecord.winSide)}】**\n${hImg}`);
+        return await sendMessage(session, `【@${username}】\n### 绝杀！\n游戏结束！\n获胜方为：【${convertTurnToString(newGameRecord.winSide)}】\n${hImg}`);
       }
 
       // 人机模式下，机器走棋
@@ -624,7 +618,7 @@ export function apply(ctx: Context, config: Config) {
           const hImg = h.image(buffer, `image/${config.imageType}`)
           await updatePlayerRecords(channelId, engineResultRecord.winSide, engineResultRecord.loseSide);
           await endGame(channelId);
-          return await sendMessage(session, `**【@${username}】**\n### 绝杀！\n游戏结束！\n获胜方为：**【${convertTurnToString(engineResultRecord.winSide)}】**\n${hImg}`);
+          return await sendMessage(session, `【@${username}】\n### 绝杀！\n游戏结束！\n获胜方为：【${convertTurnToString(engineResultRecord.winSide)}】\n${hImg}`);
         }
       }
 
@@ -644,37 +638,37 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       await checkEngine(channelId);
 
       if (gameRecord.isRegretRequest) {
-        return await sendMessage(session, `**【@${username}】**\n已经有悔棋请求了！`);
+        return await sendMessage(session, `【@${username}】\n已经有悔棋请求了！`);
       }
       const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
       if (playerRecord.length === 0) {
-        return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+        return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
       }
       const turn = gameRecord.turn;
       const sideString = convertTurnToString(turn);
       if (gameRecord.isAnalyzing) {
-        return await sendMessage(session, `**【@${username}】**\n对局分析中，请稍后再试！`);
+        return await sendMessage(session, `【@${username}】\n对局分析中，请稍后再试！`);
       }
       if (gameRecord.moveList.length < 1) {
-        return await sendMessage(session, `**【@${username}】**\n当前无法悔棋！`);
+        return await sendMessage(session, `【@${username}】\n当前无法悔棋！`);
       }
       if (gameRecord.isEnginePlayBlack || gameRecord.isEnginePlayRed) {
         await undoMove(channelId);
         await undoMove(channelId);
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `**【@${username}】**\n悔棋成功！\n${hImg}`);
+        return await sendMessage(session, `【@${username}】\n悔棋成功！\n${hImg}`);
       } else {
         if (playerRecord[0].side === sideString) {
-          return await sendMessage(session, `**【@${username}】**\n现在轮到你下棋，不可悔棋！`);
+          return await sendMessage(session, `【@${username}】\n现在轮到你下棋，不可悔棋！`);
         } else {
           await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: true })
-          return await sendMessage(session, `**【@${username}】**\n请求悔棋中...\n请对方输入相关指令选择同意或拒绝！`);
+          return await sendMessage(session, `【@${username}】\n请求悔棋中...\n请对方输入相关指令选择同意或拒绝！`);
         }
       }
     })
@@ -685,30 +679,30 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       await checkEngine(channelId);
 
       if (gameRecord.isAnalyzing) {
-        return await sendMessage(session, `**【@${username}】**\n对局分析中，请稍后再试！`);
+        return await sendMessage(session, `【@${username}】\n对局分析中，请稍后再试！`);
       }
       if (!gameRecord.isRegretRequest) {
-        return await sendMessage(session, `**【@${username}】**\n当前无悔棋请求！`);
+        return await sendMessage(session, `【@${username}】\n当前无悔棋请求！`);
       }
       const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
       if (playerRecord.length === 0) {
-        return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+        return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
       }
       const turn = gameRecord.turn;
       const sideString = convertTurnToString(turn);
       if (playerRecord[0].side !== sideString) {
-        return await sendMessage(session, `**【@${username}】**\n您所在的队伍不能做出选择！`);
+        return await sendMessage(session, `【@${username}】\n您所在的队伍不能做出选择！`);
       } else {
         await undoMove(channelId);
         await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `**【@${username}】**\n由于您同意了对方的悔棋请求！\n悔棋成功！\n${hImg}`);
+        return await sendMessage(session, `【@${username}】\n由于您同意了对方的悔棋请求！\n悔棋成功！\n${hImg}`);
       }
     })
 
@@ -718,29 +712,29 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       await checkEngine(channelId);
 
       if (gameRecord.isAnalyzing) {
-        return await sendMessage(session, `**【@${username}】**\n对局分析中，请稍后再试！`);
+        return await sendMessage(session, `【@${username}】\n对局分析中，请稍后再试！`);
       }
       if (!gameRecord.isRegretRequest) {
-        return await sendMessage(session, `**【@${username}】**\n当前无悔棋请求！`);
+        return await sendMessage(session, `【@${username}】\n当前无悔棋请求！`);
       }
       const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
       if (playerRecord.length === 0) {
-        return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+        return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
       }
       const turn = gameRecord.turn;
       const sideString = convertTurnToString(turn);
       if (playerRecord[0].side !== sideString) {
-        return await sendMessage(session, `**【@${username}】**\n您所在的队伍不能做出选择！`);
+        return await sendMessage(session, `【@${username}】\n您所在的队伍不能做出选择！`);
       } else {
         await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
         const buffer = await drawChessBoard(channelId);
         const hImg = h.image(buffer, `image/${config.imageType}`)
-        return await sendMessage(session, `**【@${username}】**\n由于您拒绝了对方的悔棋请求！\n悔棋失败，游戏继续进行！\n${hImg}`);
+        return await sendMessage(session, `【@${username}】\n由于您拒绝了对方的悔棋请求！\n悔棋失败，游戏继续进行！\n${hImg}`);
       }
     })
 
@@ -750,26 +744,26 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       await checkEngine(channelId);
 
       if (gameRecord.isAnalyzing) {
-        return await sendMessage(session, `**【@${username}】**\n对局分析中，请稍后再试！`);
+        return await sendMessage(session, `【@${username}】\n对局分析中，请稍后再试！`);
       }
       const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
       if (playerRecord.length === 0) {
-        return await sendMessage(session, `**【@${username}】**\n您还未加入游戏呢！`);
+        return await sendMessage(session, `【@${username}】\n您还未加入游戏呢！`);
       }
       const turn = gameRecord.turn;
       const sideString = convertTurnToString(turn);
       if (playerRecord[0].side !== sideString) {
-        return await sendMessage(session, `**【@${username}】**\n还没轮到${sideString}走棋哦！\n当前走棋方为：**【${convertTurnToString(gameRecord.turn)}】**`);
+        return await sendMessage(session, `【@${username}】\n还没轮到${sideString}走棋哦！\n当前走棋方为：【${convertTurnToString(gameRecord.turn)}】`);
       }
       const anotherSideString = convertTurnToString(turn === 'w' ? 'b' : 'w');
       await updatePlayerRecords(channelId, turn === 'w' ? 'b' : 'w', turn);
       await endGame(channelId);
-      return await sendMessage(session, `**【@${username}】**\n认输成功！\n游戏结束！\n获胜方为：**【${anotherSideString}】**`);
+      return await sendMessage(session, `【@${username}】\n认输成功！\n游戏结束！\n获胜方为：【${anotherSideString}】`);
 
     })
 
@@ -783,7 +777,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
       await checkEngine(channelId);
-      return await sendMessage(session, `**【@${username}】**\nhttps://www.chessdb.cn/egtb_info_dtm.html`);
+      return await sendMessage(session, `【@${username}】\nhttps://www.chessdb.cn/egtb_info_dtm.html`);
     })
 
   ctx.command('cchess.查看云库残局.DTC统计', '云库残局DTM统计')
@@ -791,7 +785,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
       await checkEngine(channelId);
-      return await sendMessage(session, `**【@${username}】**\nhttps://www.chessdb.cn/egtb_info.html`);
+      return await sendMessage(session, `【@${username}】\nhttps://www.chessdb.cn/egtb_info.html`);
     })
 
   ctx.command('cchess.编辑棋盘', '编辑棋盘指令帮助')
@@ -805,12 +799,12 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏已经开始啦~\n不可编辑棋盘！`);
+        return await sendMessage(session, `【@${username}】\n游戏已经开始啦~\n不可编辑棋盘！`);
       }
       await checkEngine(channelId);
 
       if (!fen || !isValidateFen(fen)) {
-        return await sendMessage(session, `**【@${username}】**\n无效的FEN串！`);
+        return await sendMessage(session, `【@${username}】\n无效的FEN串！`);
       }
 
       const t = fen
@@ -831,7 +825,7 @@ export function apply(ctx: Context, config: Config) {
         startFen: newStartFen
       })
       await parseFen(channelId, t)
-      return await sendMessage(session, `**【@${username}】**\n棋盘编辑成功！`);
+      return await sendMessage(session, `【@${username}】\n棋盘编辑成功！`);
     })
 
   ctx.command('cchess.编辑棋盘.导出', '导出FEN串')
@@ -840,15 +834,15 @@ export function apply(ctx: Context, config: Config) {
       await updateNameInPlayerRecord(userId, username)
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
-        return await sendMessage(session, `**【@${username}】**\n游戏还未开始哦！`);
+        return await sendMessage(session, `【@${username}】\n游戏还未开始哦！`);
       }
       if (gameRecord.isAnalyzing) {
-        return await sendMessage(session, `**【@${username}】**\n对局分析中，请稍后再试！`);
+        return await sendMessage(session, `【@${username}】\n对局分析中，请稍后再试！`);
       }
       await checkEngine(channelId);
 
       const fenWithFullMove = await getFenWithFullMove(channelId);
-      return await sendMessage(session, `**【@${username}】**\n${fenWithFullMove}`);
+      return await sendMessage(session, `【@${username}】\n${fenWithFullMove}`);
     })
 
   ctx.command('cchess.编辑棋盘.使用方法', '查看编辑棋盘的fen使用方法')
@@ -856,7 +850,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
       await checkEngine(channelId);
-      return await sendMessage(session, `**【@${username}】**\nhttps://www.xqbase.com/protocol/cchess_fen.htm`);
+      return await sendMessage(session, `【@${username}】\nhttps://www.xqbase.com/protocol/cchess_fen.htm`);
     })
 
   ctx.command('cchess.排行榜.总胜场 [number:number]', '查看玩家总胜场排行榜')
@@ -898,10 +892,10 @@ export function apply(ctx: Context, config: Config) {
           lose: 0,
           win: 0,
         })
-        return sendMessage(session, `**【@${session.username}】**\n查询对象：${username}\n无任何游戏记录。`)
+        return sendMessage(session, `【@${session.username}】\n查询对象：${username}\n无任何游戏记录。`)
       }
       const { win, lose } = targetUserRecord[0]
-      return sendMessage(session, `**【@${session.username}】**\n查询对象：${username}\n总胜场次数为：${win} 次\n总输场次数为：${lose} 次\n`)
+      return sendMessage(session, `【@${session.username}】\n查询对象：${username}\n总胜场次数为：${win} 次\n总输场次数为：${lose} 次\n`)
     });
 
   // --- 辅助函数 ---
@@ -1972,21 +1966,7 @@ export function apply(ctx: Context, config: Config) {
       const { bot, channelId } = session;
       let messageId;
 
-      if (config.isTextToImageConversionEnabled) {
-        const imageBuffer = await ctx.markdownToImage.convertToImage(message);
-        [messageId] = await session.send(h.image(imageBuffer, `image/${config.imageType}`));
-      } else {
-        // 移除 Markdown 格式以便纯文本输出
-        let plainText = message
-          // 移除加粗 **text** -> text
-          .replace(/\*\*(.*?)\*\*/g, '$1')
-          // 移除标题 ### Title -> Title
-          .replace(/^#+\s*/gm, '')
-          // 移除链接 [text](url) -> text
-          .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-
-        [messageId] = await session.send(plainText);
-      }
+      [messageId] = await session.send(message);
 
       if (config.retractDelay === 0) return;
       sentMessages.push(messageId);
