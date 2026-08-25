@@ -1,12 +1,13 @@
 {
   "name": "koishi-plugin-cchess",
   "description": "Koishi 的中国象棋插件。支持人人/人机对战。",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
-    "dist"
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
   ],
   "scripts": {
     "yakumo:after:esbuild": "node scripts/copy-assets.mjs"

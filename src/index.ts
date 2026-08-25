@@ -1251,11 +1251,13 @@ export function apply(ctx: Context, config: Config) {
   }
 
   async function getLeaderboard(session: Session, sortField: 'win' | 'lose', title: string, icon: string, number: number) {
-    const players: PlayerRecord[] = await ctx.database.get('cchess_player_records', {})
-    const topPlayers = players
-      .filter((player) => player[sortField] > 0)
-      .sort((a, b) => b[sortField] - a[sortField])
-      .slice(0, number)
+    // 过滤、排序、截断交给数据库，只有前 number 行进内存
+    const topPlayers = await ctx.database
+      .select('cchess_player_records')
+      .where({ [sortField]: { $gt: 0 } })
+      .orderBy(sortField, 'desc')
+      .limit(number)
+      .execute()
 
     return await sendMessage(session, panel({
       icon,
@@ -1386,8 +1388,9 @@ export function apply(ctx: Context, config: Config) {
     }
   }
 
-  function deepCopy(obj) {
-    return JSON.parse(JSON.stringify(obj))
+  /** 棋盘与走子列表都是纯数据，用 structuredClone 比 JSON 往返快得多。 */
+  function deepCopy<T>(obj: T): T {
+    return structuredClone(obj)
   }
 
   async function gotoHistory(channelId, targetMove) {
