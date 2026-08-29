@@ -115,10 +115,10 @@ function isLine(line: Line): line is string {
 function panel(options: PanelOptions): string {
   const { icon = '♟️', title, at, body = [], tips = [], image } = options
   const lines: string[] = [`${icon} ${title}`, RULE]
-  if (at) lines.push(`👤 @${at}`)
+  if (at) lines.push(`@${at}`)
   lines.push(...body.filter(isLine))
   const validTips = tips.filter(isLine).filter(Boolean)
-  if (validTips.length) lines.push(RULE, ...validTips.map((tip) => `💡 ${tip}`))
+  if (validTips.length) lines.push(RULE, ...validTips)
   if (image) lines.push(image)
   return lines.join('\n')
 }
@@ -355,11 +355,11 @@ export function apply(ctx: Context, config: Config) {
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
         return await sendMessage(session, panel({
-          icon: '⚔️',
+          icon: '⚠️',
           title: '棋局已经开战',
           at: username,
-          body: ['本局对弈正在进行，无法中途入场。'],
-          tips: ['等本局落幕，下一盘再并肩落子吧'],
+          body: ['本局正在进行，无法中途加入。'],
+          tips: ['本局结束后可再加入。'],
           image: await renderBoard(channelId),
         }));
       }
@@ -369,10 +369,10 @@ export function apply(ctx: Context, config: Config) {
 
       if (choice?.includes('红') && choice.includes('黑')) {
         return await sendMessage(session, panel({
-          icon: '🤔',
+          icon: '⚠️',
           title: '一次只能选一方',
           at: username,
-          body: ['红黑不可兼得，请择一而战。'],
+          body: ['请只选择红方或黑方。'],
           tips: ['「cchess.加入 红」执红先行', '「cchess.加入 黑」执黑应招'],
         }));
       }
@@ -386,7 +386,7 @@ export function apply(ctx: Context, config: Config) {
       if (selfRecords.length === 0) {
         await ctx.database.create('cchess_gaming_player_records', { channelId, userId, username, side: choice });
         return await sendMessage(session, panel({
-          icon: '🎏',
+          icon: '✅',
           title: '入座成功',
           at: username,
           body: [field('阵营', withSideIcon(choice)), field('当前人数', `${playersNum + 1} 人`)],
@@ -395,7 +395,7 @@ export function apply(ctx: Context, config: Config) {
       } else {
         await ctx.database.set('cchess_gaming_player_records', { channelId, userId }, { side: choice });
         return await sendMessage(session, panel({
-          icon: '🔄',
+          icon: '✅',
           title: '换边成功',
           at: username,
           body: [field('新的阵营', withSideIcon(choice)), field('当前人数', `${playersNum} 人`)],
@@ -410,11 +410,11 @@ export function apply(ctx: Context, config: Config) {
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
         return await sendMessage(session, panel({
-          icon: '🚩',
+          icon: '⚠️',
           title: '棋局已经开战',
           at: username,
-          body: ['战鼓已响，临阵脱逃可不是棋士风范。'],
-          tips: ['实在下不动了，可发送「cchess.认输」体面收官'],
+          body: ['对局进行中，无法退出。'],
+          tips: ['可发送「cchess.认输」结束本局'],
         }));
       }
       const selfRecords = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
@@ -425,10 +425,10 @@ export function apply(ctx: Context, config: Config) {
       } else {
         await ctx.database.remove('cchess_gaming_player_records', { channelId, userId });
         return await sendMessage(session, panel({
-          icon: '👋',
+          icon: '✅',
           title: '已离席',
           at: username,
-          body: ['期待下次与您对坐手谈。', field('剩余人数', `${playersNum - 1} 人`)],
+          body: ['已退出本局。', field('剩余人数', `${playersNum - 1} 人`)],
         }));
       }
     })
@@ -457,7 +457,7 @@ export function apply(ctx: Context, config: Config) {
       let assignNotice = '';
       if (playersNum < 2) {
         return await sendMessage(session, panel({
-          icon: '🪑',
+          icon: '⚠️',
           title: '棋差一手，人差一位',
           at: username,
           body: ['人人对战至少需要 2 位棋手。', field('当前人数', `${playersNum} 人`)],
@@ -480,7 +480,7 @@ export function apply(ctx: Context, config: Config) {
       await ctx.database.set('cchess_game_records', { channelId }, { isStarted: true })
       const sideString = convertTurnToString(gameRecord.turn);
       return await sendMessage(session, panel({
-        icon: '🎉',
+        icon: '✅',
         title: '楚河汉界，对局开始',
         body: [
           ...(assignNotice ? [assignNotice, ''] : []),
@@ -513,7 +513,7 @@ export function apply(ctx: Context, config: Config) {
       const blackPlayers = playerRecords.filter((player) => player.side === '黑方');
       if (playersNum < 1 && !config.allowFreePieceMovementInHumanMachineMode) {
         return await sendMessage(session, panel({
-          icon: '🪑',
+          icon: '⚠️',
           title: '尚无棋手入座',
           at: username,
           body: ['人机对战至少需要 1 位棋手。'],
@@ -551,7 +551,7 @@ export function apply(ctx: Context, config: Config) {
       if (engineSide === sideString) await requestEngineMove(channelId);
 
       return await sendMessage(session, panel({
-        icon: '🎉',
+        icon: '✅',
         title: '人机对局开始',
         body: [
           field('棋　手', withSideIcon(humanSide)),
@@ -572,7 +572,7 @@ export function apply(ctx: Context, config: Config) {
 
       if (!gameRecord.isStarted) {
         return await sendMessage(session, panel({
-          icon: '🌱',
+          icon: '⚠️',
           title: '棋盘尚且空空',
           at: username,
           body: ['当前没有进行中的对局，无需收拾残局。'],
@@ -581,7 +581,7 @@ export function apply(ctx: Context, config: Config) {
       }
       await endGame(channelId);
       return await sendMessage(session, panel({
-        icon: '🧹',
+        icon: '✅',
         title: '对局已强制结束',
         at: username,
         body: ['棋盘已收，胜负不计。'],
@@ -759,7 +759,7 @@ export function apply(ctx: Context, config: Config) {
       }
       if (gameRecord.moveList.length < 1) {
         return await sendMessage(session, panel({
-          icon: '🀄',
+          icon: '⚠️',
           title: '棋局初开',
           at: username,
           body: ['一子未落，无悔可言。'],
@@ -771,7 +771,7 @@ export function apply(ctx: Context, config: Config) {
         await undoMove(channelId);
         await undoMove(channelId);
         return await sendMessage(session, panel({
-          icon: '↩️',
+          icon: '✅',
           title: '悔棋成功',
           at: username,
           body: ['棋子已归原位，皮卡鱼宽宏大量。'],
@@ -780,16 +780,16 @@ export function apply(ctx: Context, config: Config) {
       }
       if (playerRecord[0].side === sideString) {
         return await sendMessage(session, panel({
-          icon: '🤨',
+          icon: '⚠️',
           title: '此刻不可悔棋',
           at: username,
-          body: ['轮到您落子，上一着是对方所走。'],
+          body: ['轮到你落子，上一着是对方所走。'],
           tips: ['落子之后，方有悔棋之说'],
         }));
       }
       await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: true })
       return await sendMessage(session, panel({
-        icon: '🙏',
+        icon: '⏳',
         title: '悔棋请求已送出',
         at: username,
         body: [field('等待答复', withSideIcon(sideString))],
@@ -806,11 +806,11 @@ export function apply(ctx: Context, config: Config) {
       await undoMove(channelId);
       await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
       return await sendMessage(session, panel({
-        icon: '🤝',
+        icon: '✅',
         title: '悔棋成功',
         at: username,
-        body: ['您应允了对方的请求，棋子已归原位。'],
-        tips: ['棋风谦和，可敬可佩'],
+        body: ['已同意悔棋，棋子已归原位。'],
+        tips: ['对局继续。'],
         image: await renderBoard(channelId),
       }));
     })
@@ -823,7 +823,7 @@ export function apply(ctx: Context, config: Config) {
 
       await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
       return await sendMessage(session, panel({
-        icon: '✋',
+        icon: '⚠️',
         title: '悔棋被拒',
         at: username,
         body: ['落子无悔，棋局继续。'],
@@ -850,16 +850,16 @@ export function apply(ctx: Context, config: Config) {
       const sideString = convertTurnToString(turn);
       if (playerRecord[0].side !== sideString) {
         return await sendMessage(session, panel({
-          icon: '🕊️',
+          icon: '⚠️',
           title: '此刻不便认输',
           at: username,
-          body: [field('您的阵营', withSideIcon(playerRecord[0].side)), field('当前轮走', withSideIcon(sideString))],
-          tips: ['轮到您走棋时，方可推枰认负'],
+          body: [field('你的阵营', withSideIcon(playerRecord[0].side)), field('当前轮走', withSideIcon(sideString))],
+          tips: ['轮到你走棋时，才可以认输'],
         }));
       }
 
       const message = await settleVictory(channelId, turn === 'w' ? 'b' : 'w', turn, '拱手认负', {
-        icon: '🕊️',
+        icon: '✅',
         at: username,
         extra: [`${withSideIcon(sideString)} 推枰认负，风度翩翩。`],
       });
@@ -876,7 +876,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId } = session
       await updateNameInPlayerRecord(userId, username)
       return await sendMessage(session, panel({
-        icon: '☁️',
+        icon: '📋',
         title: '云库残局 · DTM 统计',
         at: username,
         body: ['DTM：距将死的步数统计。', 'https://www.chessdb.cn/egtb_info_dtm.html'],
@@ -888,7 +888,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId } = session
       await updateNameInPlayerRecord(userId, username)
       return await sendMessage(session, panel({
-        icon: '☁️',
+        icon: '📋',
         title: '云库残局 · DTC 统计',
         at: username,
         body: ['DTC：距吃子的步数统计。', 'https://www.chessdb.cn/egtb_info.html'],
@@ -907,7 +907,7 @@ export function apply(ctx: Context, config: Config) {
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
         return await sendMessage(session, panel({
-          icon: '🔒',
+          icon: '⚠️',
           title: '棋局进行中',
           at: username,
           body: ['对弈期间不可改动棋盘。'],
@@ -918,7 +918,7 @@ export function apply(ctx: Context, config: Config) {
       fen = fen?.trim()
       if (!fen || !isValidateFen(fen)) {
         return await sendMessage(session, panel({
-          icon: '📜',
+          icon: '❌',
           title: 'FEN 串无法解析',
           at: username,
           body: ['请检查局面串的格式是否完整。'],
@@ -946,7 +946,7 @@ export function apply(ctx: Context, config: Config) {
       await parseFen(channelId, fen)
       const record = await getGameRecord(channelId);
       return await sendMessage(session, panel({
-        icon: '🎨',
+        icon: '✅',
         title: '棋盘摆放完毕',
         at: username,
         body: [field('轮走方', withSideIcon(convertTurnToString(record.turn)))],
@@ -969,7 +969,7 @@ export function apply(ctx: Context, config: Config) {
 
       const fenWithFullMove = await getFenWithFullMove(channelId);
       return await sendMessage(session, panel({
-        icon: '📜',
+        icon: '📋',
         title: '当前局面 FEN',
         at: username,
         body: [fenWithFullMove],
@@ -982,7 +982,7 @@ export function apply(ctx: Context, config: Config) {
       const { username, userId } = session
       await updateNameInPlayerRecord(userId, username)
       return await sendMessage(session, panel({
-        icon: '📖',
+        icon: '📋',
         title: 'FEN 串使用方法',
         at: username,
         body: ['中国象棋 FEN 格式规范：', 'https://www.xqbase.com/protocol/cchess_fen.htm'],
@@ -1062,7 +1062,7 @@ export function apply(ctx: Context, config: Config) {
 
   function notStartedPanel(username: string): string {
     return panel({
-      icon: '🌱',
+      icon: '⚠️',
       title: '棋局尚未开始',
       at: username,
       body: ['当前频道还没有进行中的对局。'],
@@ -1072,27 +1072,27 @@ export function apply(ctx: Context, config: Config) {
 
   function alreadyStartedPanel(username: string): string {
     return panel({
-      icon: '⚔️',
+      icon: '⚠️',
       title: '棋局已经开战',
       at: username,
-      body: ['本局尚未分出胜负，不必重开。'],
-      tips: ['「cchess.认输」体面收官', '「cchess.结束」强制清盘'],
+      body: ['本局尚未结束，不必重开。'],
+      tips: ['「cchess.认输」结束本局', '「cchess.结束」强制清盘'],
     })
   }
 
   function notJoinedPanel(username: string): string {
     return panel({
-      icon: '🪑',
-      title: '您尚未入座',
+      icon: '⚠️',
+      title: '你尚未入座',
       at: username,
-      body: ['先落座，才好落子。'],
+      body: ['请先加入对局。'],
       tips: ['发送「cchess.加入」加入对局'],
     })
   }
 
   function analyzingPanel(username: string): string {
     return panel({
-      icon: '🧠',
+      icon: '⏳',
       title: '皮卡鱼正在推演',
       at: username,
       body: ['引擎正在计算局面，请稍候再试。'],
@@ -1101,17 +1101,17 @@ export function apply(ctx: Context, config: Config) {
 
   function notYourTurnPanel(username: string, yourSide: string, currentSide: string): string {
     return panel({
-      icon: '⌛',
-      title: '尚未轮到您',
+      icon: '⚠️',
+      title: '尚未轮到你',
       at: username,
-      body: [field('您的阵营', withSideIcon(yourSide)), field('当前轮走', withSideIcon(currentSide))],
-      tips: ['稍安勿躁，静候对方落子'],
+      body: [field('你的阵营', withSideIcon(yourSide)), field('当前轮走', withSideIcon(currentSide))],
+      tips: ['请等待对方落子。'],
     })
   }
 
   function invalidMovePanel(username: string, reason: string): string {
     return panel({
-      icon: '🚫',
+      icon: '❌',
       title: reason,
       at: username,
       body: ['请确认着法是否合乎棋规。'],
@@ -1121,7 +1121,7 @@ export function apply(ctx: Context, config: Config) {
 
   function engineUnavailablePanel(username: string): string {
     return panel({
-      icon: '🐟',
+      icon: '⏳',
       title: '皮卡鱼尚未就绪',
       at: username,
       body: ['引擎启动失败，暂时无法进行人机对战。'],
@@ -1131,10 +1131,10 @@ export function apply(ctx: Context, config: Config) {
 
   function invalidLeaderboardSizePanel(username: string): string {
     return panel({
-      icon: '🔢',
+      icon: '⚠️',
       title: '榜单人数有误',
       at: username,
-      body: ['请输入大于等于 0 的整数。'],
+      body: ['请输入不小于 0 的整数。'],
       tips: ['例如：cchess.排行榜.总胜场 10'],
     })
   }
@@ -1154,7 +1154,7 @@ export function apply(ctx: Context, config: Config) {
     title: string,
     options: { icon?: string, at?: string, extra?: Line[], withBoard?: boolean } = {},
   ): Promise<string> {
-    const { icon = '🏆', at, extra = [], withBoard = false } = options
+    const { icon = '✅', at, extra = [], withBoard = false } = options
     const image = withBoard ? await renderBoard(channelId) : undefined
     const winners = await ctx.database.get('cchess_gaming_player_records', {
       channelId,
@@ -1185,7 +1185,7 @@ export function apply(ctx: Context, config: Config) {
     if (gameRecord.isAnalyzing || busyChannels.has(channelId)) return analyzingPanel(username);
     if (!gameRecord.isRegretRequest) {
       return panel({
-        icon: '🍃',
+        icon: '⚠️',
         title: '暂无悔棋请求',
         at: username,
         body: [`当前没有待答复的请求，无从${action}。`],
@@ -1196,7 +1196,7 @@ export function apply(ctx: Context, config: Config) {
     const sideString = convertTurnToString(gameRecord.turn);
     if (playerRecord[0].side !== sideString) {
       return panel({
-        icon: '🙅',
+        icon: '⚠️',
         title: '无权表决',
         at: username,
         body: ['悔棋请求正由对方等待答复。', field('应答方', withSideIcon(sideString))],
