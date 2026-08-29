@@ -28,24 +28,19 @@ Koishi 的中国象棋插件。支持人人/人机对战。
 | `cchess.排行榜.总胜场 [人数]` | 查看胜场榜 |
 | `cchess.查询玩家记录 [@某人]` | 查看棋士战绩 |
 
-## Q&A
+## 注意事项
 
-1. 如何移动棋子？
+着法用纵线（炮二平五 / 炮8平5）或字母坐标（b2e2）。详见 [中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)。
 
-- 纵线（炮二平五/炮8平5）或字母坐标（b2e2）。
-- 详见 [中国象棋着法表示](https://www.xqbase.com/protocol/cchess_move.htm)。
-
-2. 人机太强 / 太弱？
-
-- 调整「引擎思考深度」，深度越高棋力越强，耗时也越长。
+人机强弱看配置里的「引擎思考深度」：越高棋力越强，耗时也越长。
 
 ## 致谢
 
-- [Koishi](https://koishi.chat/) - 机器人框架
-- [风满楼]() - 棋盘与棋子素材
-- [皮卡鱼](https://xiangqiai.com/#/) - 中国象棋 AI 引擎
-- [中国象棋云库](https://www.chessdb.cn/query/) - 中国象棋棋谱
-- [中国象棋应用规范](https://www.xqbase.com/protocol/cchess_intro.htm) - 中国象棋标准规范
+- [Koishi](https://koishi.chat/)
+- 风满楼 — 棋盘与棋子素材
+- [皮卡鱼](https://xiangqiai.com/#/)
+- [中国象棋云库](https://www.chessdb.cn/query/)
+- [中国象棋应用规范](https://www.xqbase.com/protocol/cchess_intro.htm)
 
 ## QQ 群
 
