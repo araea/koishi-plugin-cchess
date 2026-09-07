@@ -1,49 +1,34 @@
-koishi-plugin-cchess
-====================
+# koishi-plugin-cchess
 
-[<img alt="github" src="https://img.shields.io/badge/github-araea/koishi__plugin__cchess-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/araea/koishi-plugin-cchess)
-[<img alt="npm" src="https://img.shields.io/npm/v/koishi-plugin-cchess.svg?style=for-the-badge&color=fc8d62&logo=npm" height="20">](https://www.npmjs.com/package/koishi-plugin-cchess)
+中国象棋插件，支持人人对战和皮卡鱼人机对战。
 
-Koishi 的中国象棋插件。
+## 安装
 
-## 使用
+~~~sh
+yarn add koishi-plugin-cchess
+~~~
 
-`cchess.加入` 入座，`cchess.开始.人人对战` 或 `cchess.开始.人机对战` 开局。着法可直接发送，如炮二平五或 `b2e2`。
+在 Koishi 配置中启用 koishi-plugin-cchess，并提供 database、puppeteer 和 canvas 服务。
 
 ## 指令
 
 | 指令 | 说明 |
 | --- | --- |
-| `cchess.加入 [红/黑]` | 入座 |
-| `cchess.退出` | 开局前离席 |
-| `cchess.开始.人人对战` | 人人对战 |
-| `cchess.开始.人机对战` | 人机对战（皮卡鱼） |
-| `cchess.移动 <着法>` | 落子 |
-| `cchess.悔棋.请求` | 悔棋 |
-| `cchess.认输` | 认输 |
-| `cchess.结束` | 强制清盘 |
-| `cchess.编辑棋盘.导入 <FEN>` | 导入局面 |
-| `cchess.编辑棋盘.导出` | 导出局面 |
-| `cchess.排行榜.总胜场 [人数]` | 胜场榜 |
-| `cchess.查询玩家记录 [@某人]` | 查看战绩 |
+| cchess.加入 [红/黑] | 入座 |
+| cchess.退出 | 开局前离席 |
+| cchess.开始.人人对战 | 人人对战 |
+| cchess.开始.人机对战 | 人机对战 |
+| cchess.移动 &lt;着法&gt; | 落子 |
+| cchess.悔棋.请求 | 请求悔棋 |
+| cchess.认输 | 认输 |
+| cchess.结束 | 强制结束棋局 |
+| cchess.编辑棋盘.导入 &lt;FEN&gt; | 导入局面 |
+| cchess.编辑棋盘.导出 | 导出局面 |
+| cchess.排行榜.总胜场 [人数] | 查看胜场排行 |
+| cchess.查询玩家记录 [@某人] | 查看战绩 |
 
-## QQ 群
+着法可直接发送，例如炮二平五或 b2e2。
 
-956758505
+## 许可证
 
-<br>
-
-#### License
-
-<sup>
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
-</sup>
-
-<br>
-
-<sub>
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this crate by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
-</sub>
+可按 [Apache-2.0](LICENSE-APACHE) 或 [MIT](LICENSE-MIT) 使用。
