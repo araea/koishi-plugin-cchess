@@ -19,11 +19,16 @@ export const usage = `## 使用
 | \`cchess.开始.人机对战\` | 人机对战 |
 | \`cchess.移动 <着法>\` | 落子 |
 | \`cchess.悔棋.请求\` | 请求悔棋 |
+| \`cchess.悔棋.同意\` | 同意悔棋 |
+| \`cchess.悔棋.拒绝\` | 拒绝悔棋 |
 | \`cchess.认输\` | 认输 |
 | \`cchess.结束\` | 强制结束棋局 |
 | \`cchess.编辑棋盘.导入 <FEN>\` | 导入局面 |
 | \`cchess.编辑棋盘.导出\` | 导出局面 |
+| \`cchess.编辑棋盘.使用方法\` | 查看 FEN 用法 |
+| \`cchess.查看云库残局\` | 云库残局（DTM / DTC 统计） |
 | \`cchess.排行榜.总胜场 [人数]\` | 胜场排行 |
+| \`cchess.排行榜.总输场 [人数]\` | 总输场排行 |
 | \`cchess.查询玩家记录 [@某人]\` | 战绩 |`
 
 export const inject = ['database', 'puppeteer', 'canvas']
