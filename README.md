@@ -8,7 +8,7 @@
 yarn add koishi-plugin-cchess
 ```
 
-在 Koishi 配置中启用，并提供 database、puppeteer 与 canvas 服务。
+在 Koishi 配置中启用，并提供 database 与 canvas 服务。
 
 ## 指令
 

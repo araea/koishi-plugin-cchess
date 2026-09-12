@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-cchess",
   "description": "Koishi 的中国象棋插件。",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -16,7 +16,6 @@
     "service": {
       "required": [
         "database",
-        "puppeteer",
         "canvas"
       ]
     }
@@ -49,7 +48,6 @@
     "koishi": "^4.18.11"
   },
   "devDependencies": {
-    "@koishijs/canvas": "^0.2.0",
-    "koishi-plugin-puppeteer": "^3.9.0"
+    "@koishijs/canvas": "^0.2.0"
   }
 }

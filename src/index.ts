@@ -29,7 +29,7 @@ export const usage = `## 使用
 | \`cchess.排行榜 [胜场/输场] [人数]\` | 排行榜 |
 | \`cchess.查询玩家记录 [@某人]\` | 战绩 |`
 
-export const inject = ['database', 'puppeteer', 'canvas']
+export const inject = ['database', 'canvas']
 
 export interface Config {
   boardSkin: string
