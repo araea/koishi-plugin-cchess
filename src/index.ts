@@ -7,7 +7,9 @@ export const name = 'cchess'
 
 export const usage = `## 使用
 
-\`cchess.加入\` 入座，\`cchess.开始.人人对战\` 或 \`cchess.开始.人机对战\` 开局。着法可直接发送，例如 \`炮二平五\` 或 \`b2e2\`。
+\`cchess.加入\` 入座，\`cchess.开始 人人\` 或 \`cchess.开始 人机\` 开局。着法可直接发送，例如 \`炮二平五\` 或 \`b2e2\`。
+
+悔棋请求送出后，对方无需带指令前缀，直接回复 \`同意\` 或 \`拒绝\` 即可表决。
 
 ## 指令
 
@@ -15,20 +17,16 @@ export const usage = `## 使用
 | --- | --- |
 | \`cchess.加入 [红/黑]\` | 入座 |
 | \`cchess.退出\` | 开局前离席 |
-| \`cchess.开始.人人对战\` | 人人对战 |
-| \`cchess.开始.人机对战\` | 人机对战 |
+| \`cchess.开始 [人人/人机]\` | 开局，默认人人对战 |
 | \`cchess.移动 <着法>\` | 落子 |
-| \`cchess.悔棋.请求\` | 请求悔棋 |
-| \`cchess.悔棋.同意\` | 同意悔棋 |
-| \`cchess.悔棋.拒绝\` | 拒绝悔棋 |
+| \`cchess.悔棋\` | 请求悔棋 |
+| \`cchess.悔棋 <同意/拒绝>\` | 表决悔棋，也可直接回复同意或拒绝 |
 | \`cchess.认输\` | 认输 |
 | \`cchess.结束\` | 强制结束棋局 |
-| \`cchess.编辑棋盘.导入 <FEN>\` | 导入局面 |
+| \`cchess.编辑棋盘 <FEN>\` | 导入局面，不带参数时查看 FEN 用法 |
 | \`cchess.编辑棋盘.导出\` | 导出局面 |
-| \`cchess.编辑棋盘.使用方法\` | 查看 FEN 用法 |
-| \`cchess.查看云库残局\` | 云库残局（DTM / DTC 统计） |
-| \`cchess.排行榜.总胜场 [人数]\` | 胜场排行 |
-| \`cchess.排行榜.总输场 [人数]\` | 总输场排行 |
+| \`cchess.查看云库残局 [DTM/DTC]\` | 云库残局统计 |
+| \`cchess.排行榜 [胜场/输场] [人数]\` | 排行榜 |
 | \`cchess.查询玩家记录 [@某人]\` | 战绩 |`
 
 export const inject = ['database', 'puppeteer', 'canvas']
@@ -304,6 +302,36 @@ export function apply(ctx: Context, config: Config) {
     autoInc: true,
   })
 
+  /** 悔棋表决词。应答方不用带指令前缀，直接回复即可。 */
+  const REGRET_AGREE = /^(同意|可以|行吧|没问题|同意悔棋|ok|yes)$/i
+  const REGRET_REJECT = /^(拒绝|不行|不同意|不许|拒绝悔棋|no)$/i
+
+  /** 判断文本是不是悔棋表决，是则返回表决结果，否则返回 null。 */
+  function matchRegretDecision(content: string): 'agree' | 'reject' | null {
+    // 容忍「同意。」「拒绝！」这类带标点的回复
+    const text = content.trim().replace(/[。．.!！?？~～,，、;；]+$/, '')
+    if (REGRET_AGREE.test(text)) return 'agree'
+    if (REGRET_REJECT.test(text)) return 'reject'
+    return null
+  }
+
+  // 中间件：悔棋表决。仅当频道内有待决请求、且发言者正是应答方时才响应
+  ctx.middleware(async (session, next) => {
+    const { channelId, content, userId } = session;
+    // 先做零成本的文本判断，避免为每一条消息访问数据库
+    if (!channelId || !content) return next();
+    const decision = matchRegretDecision(content);
+    if (!decision) return next();
+
+    const [gameRecord] = await ctx.database.get('cchess_game_records', { channelId });
+    if (!gameRecord?.isStarted || !gameRecord.isRegretRequest) return next();
+
+    const [playerRecord] = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
+    if (playerRecord?.side !== convertTurnToString(gameRecord.turn)) return next();
+
+    await resolveRegret(session, decision === 'agree');
+  });
+
   // 中间件：处理直接输入棋谱的情况
   ctx.middleware(async (session, next) => {
     const { channelId, content, userId, username } = session;
@@ -379,7 +407,7 @@ export function apply(ctx: Context, config: Config) {
           title: '入座成功',
           at: username,
           body: [field('阵营', withSideIcon(choice)), field('当前人数', `${playersNum + 1} 人`)],
-          tips: ['再次发送「cchess.加入 红 / 黑」即可换边', '人齐后发送「cchess.开始.人人对战」开局'],
+          tips: ['再次发送「cchess.加入 红 / 黑」即可换边', '人齐后发送「cchess.开始 人人」开局'],
         }));
       } else {
         await ctx.database.set('cchess_gaming_player_records', { channelId, userId }, { side: choice });
@@ -422,13 +450,8 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('cchess.开始', '开始游戏指令帮助')
-    .action(async ({ session }) => {
-      await session.execute(`cchess.开始 -h`)
-    })
-
-  ctx.command('cchess.开始.人人对战', '开始人人对战')
-    .action(async ({ session }) => {
+  ctx.command('cchess.开始 [mode:string]', '开始对局，mode 可选「人人」或「人机」')
+    .action(async ({ session }, mode) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
 
@@ -437,10 +460,16 @@ export function apply(ctx: Context, config: Config) {
       if (gameRecord.isStarted) {
         return await sendMessage(session, alreadyStartedPanel(username));
       }
-      // 引擎用于判定绝杀，在后台预热即可
-      void checkEngine(channelId);
+
       const playerRecords = await ctx.database.get('cchess_gaming_player_records', { channelId })
       const playersNum = playerRecords.length;
+      // 只有明确提到「机」「电脑」或 ai 才走人机，其余一律人人对战
+      if (/机|电脑|ai|engine|pve/i.test(mode ?? '')) {
+        return await startVersusEngine(session, gameRecord, playerRecords);
+      }
+
+      // 引擎用于判定绝杀，在后台预热即可
+      void checkEngine(channelId);
       let redPlayers = playerRecords.filter((player) => player.side === '红方');
       let blackPlayers = playerRecords.filter((player) => player.side === '黑方');
       let assignNotice = '';
@@ -480,73 +509,6 @@ export function apply(ctx: Context, config: Config) {
           ...blackPlayers.map((player) => `　@${player.username}`),
           '',
           field('先手', withSideIcon(sideString)),
-        ],
-        tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
-        image: await renderBoard(channelId),
-      }));
-    })
-
-  ctx.command('cchess.开始.人机对战', '开始人机对战')
-    .action(async ({ session }) => {
-      const { username, userId, channelId } = session
-      await updateNameInPlayerRecord(userId, username)
-      const gameRecord = await getGameRecord(channelId);
-
-      if (gameRecord.isStarted) {
-        return await sendMessage(session, alreadyStartedPanel(username));
-      }
-
-      const playerRecords = await ctx.database.get('cchess_gaming_player_records', { channelId })
-      const playersNum = playerRecords.length;
-      const redPlayers = playerRecords.filter((player) => player.side === '红方');
-      const blackPlayers = playerRecords.filter((player) => player.side === '黑方');
-      if (playersNum < 1 && !config.allowFreePieceMovementInHumanMachineMode) {
-        return await sendMessage(session, panel({
-          icon: '⚠️',
-          title: '尚无棋手入座',
-          at: username,
-          body: ['人机对战至少需要 1 位棋手。'],
-          tips: ['发送「cchess.加入」即可入座挑战皮卡鱼'],
-        }));
-      }
-
-      if (!await checkEngine(channelId)) {
-        return await sendMessage(session, engineUnavailablePanel(username));
-      }
-
-      // 决定人类阵营：人少的一方并入人多的一方，势均力敌则听天由命
-      let humanSide: string;
-      if (playersNum === 1) {
-        humanSide = playerRecords[0].side === '红方' ? '红方' : '黑方';
-      } else if (redPlayers.length !== blackPlayers.length) {
-        humanSide = redPlayers.length > blackPlayers.length ? '红方' : '黑方';
-      } else {
-        humanSide = Math.random() < 0.5 ? '红方' : '黑方';
-      }
-      const engineSide = humanSide === '红方' ? '黑方' : '红方';
-
-      for (const player of playerRecords) {
-        if (player.side === humanSide) continue;
-        await ctx.database.set('cchess_gaming_player_records', { channelId, userId: player.userId }, { side: humanSide });
-      }
-      await ctx.database.set('cchess_game_records', { channelId }, {
-        isStarted: true,
-        isEnginePlayRed: engineSide === '红方',
-        isEnginePlayBlack: engineSide === '黑方',
-      })
-
-      const sideString = convertTurnToString(gameRecord.turn);
-      // 引擎执先手时，先替它落下第一子
-      if (engineSide === sideString) await requestEngineMove(channelId);
-
-      return await sendMessage(session, panel({
-        icon: '✅',
-        title: '人机对局开始',
-        body: [
-          field('棋　手', withSideIcon(humanSide)),
-          field('皮卡鱼', withSideIcon(engineSide)),
-          field('先　手', withSideIcon(sideString)),
-          field('思考深度', `${thinkingDepth} 层`),
         ],
         tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
         image: await renderBoard(channelId),
@@ -607,7 +569,7 @@ export function apply(ctx: Context, config: Config) {
             title: '悔棋请求待决',
             at: username,
             body: ['对方的悔棋请求尚未答复，棋局暂歇。'],
-            tips: ['发送「cchess.悔棋.同意」或「cchess.悔棋.拒绝」'],
+            tips: ['对方回复「同意」或「拒绝」即可表决'],
           }));
         }
 
@@ -718,15 +680,23 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('cchess.悔棋', '悔棋指令帮助')
-    .action(async ({ session }) => {
-      await session.execute(`cchess.悔棋 -h`)
-    })
-
-  ctx.command('cchess.悔棋.请求', '请求悔棋')
-    .action(async ({ session }) => {
+  ctx.command('cchess.悔棋 [decision:string]', '请求悔棋；待决时由对方以「同意 / 拒绝」表决')
+    .action(async ({ session }, decision) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
+
+      if (decision) {
+        const choice = matchRegretDecision(decision)
+        if (choice) return await resolveRegret(session, choice === 'agree')
+        return await sendMessage(session, panel({
+          icon: '⚠️',
+          title: '表决无效',
+          at: username,
+          body: ['悔棋表决只有同意与拒绝两种。'],
+          tips: ['「cchess.悔棋 同意」或「cchess.悔棋 拒绝」'],
+        }))
+      }
+
       const gameRecord = await getGameRecord(channelId);
       if (!gameRecord.isStarted) {
         return await sendMessage(session, notStartedPanel(username));
@@ -740,6 +710,7 @@ export function apply(ctx: Context, config: Config) {
           title: '已有悔棋请求',
           at: username,
           body: ['正在等待对方答复，请勿重复请求。'],
+          tips: ['对方回复「同意」或「拒绝」即可表决'],
         }));
       }
       const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
@@ -782,41 +753,7 @@ export function apply(ctx: Context, config: Config) {
         title: '悔棋请求已送出',
         at: username,
         body: [field('等待答复', withSideIcon(sideString))],
-        tips: ['对方可发送「cchess.悔棋.同意」或「cchess.悔棋.拒绝」'],
-      }));
-    })
-
-  ctx.command('cchess.悔棋.同意', '同意悔棋')
-    .action(async ({ session }) => {
-      const { username, channelId } = session
-      const decision = await checkRegretDecision(session, '同意');
-      if (typeof decision === 'string') return await sendMessage(session, decision);
-
-      await undoMove(channelId);
-      await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
-      return await sendMessage(session, panel({
-        icon: '✅',
-        title: '悔棋成功',
-        at: username,
-        body: ['已同意悔棋，棋子已归原位。'],
-        tips: ['对局继续。'],
-        image: await renderBoard(channelId),
-      }));
-    })
-
-  ctx.command('cchess.悔棋.拒绝', '拒绝悔棋')
-    .action(async ({ session }) => {
-      const { username, channelId } = session
-      const decision = await checkRegretDecision(session, '拒绝');
-      if (typeof decision === 'string') return await sendMessage(session, decision);
-
-      await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
-      return await sendMessage(session, panel({
-        icon: '⚠️',
-        title: '悔棋被拒',
-        at: username,
-        body: ['落子无悔，棋局继续。'],
-        image: await renderBoard(channelId),
+        tips: ['对方回复「同意」或「拒绝」即可表决'],
       }));
     })
 
@@ -855,44 +792,35 @@ export function apply(ctx: Context, config: Config) {
       return await sendMessage(session, message);
     })
 
-  ctx.command('cchess.查看云库残局', '云库残局指令帮助')
-    .action(async ({ session }) => {
-      await session.execute(`cchess.查看云库残局 -h`)
-    })
-
-  ctx.command('cchess.查看云库残局.DTM统计', '云库残局 DTM 统计')
-    .action(async ({ session }) => {
+  ctx.command('cchess.查看云库残局 [type:string]', '云库残局 DTM / DTC 统计')
+    .action(async ({ session }, type) => {
       const { username, userId } = session
       await updateNameInPlayerRecord(userId, username)
+      const isDtc = /dtc/i.test(type ?? '')
       return await sendMessage(session, panel({
         icon: '📋',
-        title: '云库残局 · DTM 统计',
+        title: `云库残局 · ${isDtc ? 'DTC' : 'DTM'} 统计`,
         at: username,
-        body: ['DTM：距将死的步数统计。', 'https://www.chessdb.cn/egtb_info_dtm.html'],
+        body: isDtc
+          ? ['DTC：距吃子的步数统计。', 'https://www.chessdb.cn/egtb_info.html']
+          : ['DTM：距将死的步数统计。', 'https://www.chessdb.cn/egtb_info_dtm.html'],
       }));
     })
 
-  ctx.command('cchess.查看云库残局.DTC统计', '云库残局 DTC 统计')
-    .action(async ({ session }) => {
-      const { username, userId } = session
-      await updateNameInPlayerRecord(userId, username)
-      return await sendMessage(session, panel({
-        icon: '📋',
-        title: '云库残局 · DTC 统计',
-        at: username,
-        body: ['DTC：距吃子的步数统计。', 'https://www.chessdb.cn/egtb_info.html'],
-      }));
-    })
-
-  ctx.command('cchess.编辑棋盘', '编辑棋盘指令帮助')
-    .action(async ({ session }) => {
-      await session.execute(`cchess.编辑棋盘 -h`)
-    })
-
-  ctx.command('cchess.编辑棋盘.导入 <fen:text>', '导入FEN串')
+  ctx.command('cchess.编辑棋盘 [fen:text]', '导入 FEN 局面，不带参数时查看 FEN 用法')
     .action(async ({ session }, fen) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
+
+      if (!fen) {
+        return await sendMessage(session, panel({
+          icon: '📋',
+          title: 'FEN 串使用方法',
+          at: username,
+          body: ['中国象棋 FEN 格式规范：', 'https://www.xqbase.com/protocol/cchess_fen.htm'],
+        }));
+      }
+
       const gameRecord = await getGameRecord(channelId);
       if (gameRecord.isStarted) {
         return await sendMessage(session, panel({
@@ -913,7 +841,7 @@ export function apply(ctx: Context, config: Config) {
           body: ['请检查局面串的格式是否完整。'],
           tips: [
             '示例：rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w',
-            '发送「cchess.编辑棋盘.使用方法」查看规范',
+            '发送「cchess.编辑棋盘」查看规范',
           ],
         }));
       }
@@ -939,7 +867,7 @@ export function apply(ctx: Context, config: Config) {
         title: '棋盘摆放完毕',
         at: username,
         body: [field('轮走方', withSideIcon(convertTurnToString(record.turn)))],
-        tips: ['发送「cchess.开始.人人对战」或「cchess.开始.人机对战」由此局面开战'],
+        tips: ['发送「cchess.开始 人人」或「cchess.开始 人机」由此局面开战'],
         image: await renderBoard(channelId),
       }));
     })
@@ -962,45 +890,30 @@ export function apply(ctx: Context, config: Config) {
         title: '当前局面 FEN',
         at: username,
         body: [fenWithFullMove],
-        tips: ['可用「cchess.编辑棋盘.导入」还原此局面'],
+        tips: ['可用「cchess.编辑棋盘 <FEN>」还原此局面'],
       }));
     })
 
-  ctx.command('cchess.编辑棋盘.使用方法', '查看编辑棋盘的fen使用方法')
-    .action(async ({ session }) => {
-      const { username, userId } = session
-      await updateNameInPlayerRecord(userId, username)
-      return await sendMessage(session, panel({
-        icon: '📋',
-        title: 'FEN 串使用方法',
-        at: username,
-        body: ['中国象棋 FEN 格式规范：', 'https://www.xqbase.com/protocol/cchess_fen.htm'],
-      }));
-    })
-
-  ctx.command('cchess.排行榜', '排行榜指令帮助')
-    .action(async ({ session }) => {
-      await session.execute(`cchess.排行榜 -h`)
-    })
-
-  ctx.command('cchess.排行榜.总胜场 [number:number]', '查看玩家总胜场排行榜')
-    .action(async ({ session }, number = config.defaultMaxLeaderboardEntries) => {
+  ctx.command('cchess.排行榜 [type:string] [number:number]', '查看玩家排行榜')
+    .action(async ({ session }, type, number = config.defaultMaxLeaderboardEntries) => {
       const { userId, username } = session
       await updateNameInPlayerRecord(userId, username)
+      // 兼容「cchess.排行榜 10」这种省略榜单类型的写法
+      if (type && /^\d+$/.test(type)) {
+        number = Number(type)
+        type = ''
+      }
       if (typeof number !== 'number' || isNaN(number) || number < 0) {
         return await sendMessage(session, invalidLeaderboardSizePanel(username));
       }
-      return await getLeaderboard(session, 'win', '总胜场排行榜', '🏆', number);
-    });
-
-  ctx.command('cchess.排行榜.总输场 [number:number]', '查看玩家总输场排行榜')
-    .action(async ({ session }, number = config.defaultMaxLeaderboardEntries) => {
-      const { userId, username } = session
-      await updateNameInPlayerRecord(userId, username)
-      if (typeof number !== 'number' || isNaN(number) || number < 0) {
-        return await sendMessage(session, invalidLeaderboardSizePanel(username));
-      }
-      return await getLeaderboard(session, 'lose', '总输场排行榜', '🍂', number);
+      const byLose = !!type && /负|输|lose/i.test(type)
+      return await getLeaderboard(
+        session,
+        byLose ? 'lose' : 'win',
+        byLose ? '总输场排行榜' : '总胜场排行榜',
+        byLose ? '🍂' : '🏆',
+        number,
+      );
     });
 
   ctx.command('cchess.查询玩家记录 [targetUser:text]', '查询玩家记录')
@@ -1055,7 +968,7 @@ export function apply(ctx: Context, config: Config) {
       title: '棋局尚未开始',
       at: username,
       body: ['当前频道还没有进行中的对局。'],
-      tips: ['「cchess.加入」入座', '「cchess.开始.人人对战」与好友手谈', '「cchess.开始.人机对战」挑战皮卡鱼'],
+      tips: ['「cchess.加入」入座', '「cchess.开始 人人」与好友手谈', '「cchess.开始 人机」挑战皮卡鱼'],
     })
   }
 
@@ -1114,7 +1027,7 @@ export function apply(ctx: Context, config: Config) {
       title: '皮卡鱼尚未就绪',
       at: username,
       body: ['引擎启动失败，暂时无法进行人机对战。'],
-      tips: ['稍后重试，或改用「cchess.开始.人人对战」'],
+      tips: ['稍后重试，或改用「cchess.开始 人人」'],
     })
   }
 
@@ -1124,7 +1037,7 @@ export function apply(ctx: Context, config: Config) {
       title: '榜单人数有误',
       at: username,
       body: ['请输入不小于 0 的整数。'],
-      tips: ['例如：cchess.排行榜.总胜场 10'],
+      tips: ['例如：cchess.排行榜 胜场 10'],
     })
   }
 
@@ -1165,33 +1078,113 @@ export function apply(ctx: Context, config: Config) {
     })
   }
 
-  /** 校验悔棋表决的前置条件；通过时返回 null，否则返回提示消息。 */
-  async function checkRegretDecision(session: Session, action: string): Promise<string | null> {
+  /** 人机对战开局。 */
+  async function startVersusEngine(session: Session, gameRecord: GameRecord, playerRecords: GamingPlayer[]) {
+    const { username, channelId } = session
+    const playersNum = playerRecords.length;
+    const redPlayers = playerRecords.filter((player) => player.side === '红方');
+    const blackPlayers = playerRecords.filter((player) => player.side === '黑方');
+    if (playersNum < 1 && !config.allowFreePieceMovementInHumanMachineMode) {
+      return await sendMessage(session, panel({
+        icon: '⚠️',
+        title: '尚无棋手入座',
+        at: username,
+        body: ['人机对战至少需要 1 位棋手。'],
+        tips: ['发送「cchess.加入」即可入座挑战皮卡鱼'],
+      }));
+    }
+
+    if (!await checkEngine(channelId)) {
+      return await sendMessage(session, engineUnavailablePanel(username));
+    }
+
+    // 决定人类阵营：人少的一方并入人多的一方，势均力敌则听天由命
+    let humanSide: string;
+    if (playersNum === 1) {
+      humanSide = playerRecords[0].side === '红方' ? '红方' : '黑方';
+    } else if (redPlayers.length !== blackPlayers.length) {
+      humanSide = redPlayers.length > blackPlayers.length ? '红方' : '黑方';
+    } else {
+      humanSide = Math.random() < 0.5 ? '红方' : '黑方';
+    }
+    const engineSide = humanSide === '红方' ? '黑方' : '红方';
+
+    for (const player of playerRecords) {
+      if (player.side === humanSide) continue;
+      await ctx.database.set('cchess_gaming_player_records', { channelId, userId: player.userId }, { side: humanSide });
+    }
+    await ctx.database.set('cchess_game_records', { channelId }, {
+      isStarted: true,
+      isEnginePlayRed: engineSide === '红方',
+      isEnginePlayBlack: engineSide === '黑方',
+    })
+
+    const sideString = convertTurnToString(gameRecord.turn);
+    // 引擎执先手时，先替它落下第一子
+    if (engineSide === sideString) await requestEngineMove(channelId);
+
+    return await sendMessage(session, panel({
+      icon: '✅',
+      title: '人机对局开始',
+      body: [
+        field('棋　手', withSideIcon(humanSide)),
+        field('皮卡鱼', withSideIcon(engineSide)),
+        field('先　手', withSideIcon(sideString)),
+        field('思考深度', `${thinkingDepth} 层`),
+      ],
+      tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
+      image: await renderBoard(channelId),
+    }));
+  }
+
+  /** 兑现悔棋表决：同意则回退一着，拒绝则棋局继续。 */
+  async function resolveRegret(session: Session, agree: boolean): Promise<void> {
     const { username, userId, channelId } = session
     await updateNameInPlayerRecord(userId, username)
     const gameRecord = await getGameRecord(channelId);
-    if (!gameRecord.isStarted) return notStartedPanel(username);
-    if (gameRecord.isAnalyzing || busyChannels.has(channelId)) return analyzingPanel(username);
+    if (!gameRecord.isStarted) return await sendMessage(session, notStartedPanel(username));
+    if (gameRecord.isAnalyzing || busyChannels.has(channelId)) return await sendMessage(session, analyzingPanel(username));
     if (!gameRecord.isRegretRequest) {
-      return panel({
+      return await sendMessage(session, panel({
         icon: '⚠️',
         title: '暂无悔棋请求',
         at: username,
-        body: [`当前没有待答复的请求，无从${action}。`],
-      });
+        body: [`当前没有待答复的请求，无从${agree ? '同意' : '拒绝'}。`],
+      }));
     }
     const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
-    if (playerRecord.length === 0) return notJoinedPanel(username);
+    if (playerRecord.length === 0) return await sendMessage(session, notJoinedPanel(username));
     const sideString = convertTurnToString(gameRecord.turn);
     if (playerRecord[0].side !== sideString) {
-      return panel({
+      return await sendMessage(session, panel({
         icon: '⚠️',
         title: '无权表决',
         at: username,
         body: ['悔棋请求正由对方等待答复。', field('应答方', withSideIcon(sideString))],
-      });
+      }));
     }
-    return null;
+
+    if (!agree) {
+      await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
+      return await sendMessage(session, panel({
+        icon: '⚠️',
+        title: '悔棋被拒',
+        at: username,
+        body: ['落子无悔，棋局继续。'],
+        image: await renderBoard(channelId),
+      }));
+    }
+
+    await undoMove(channelId);
+    await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
+    return await sendMessage(session, panel({
+      icon: '✅',
+      title: '悔棋成功',
+      at: username,
+      body: ['已同意悔棋，棋子已归原位。'],
+      tips: ['对局继续。'],
+      image: await renderBoard(channelId),
+    }));
   }
 
   async function replaceAtTags(session: Session, content: string): Promise<string> {
