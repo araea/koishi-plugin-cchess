@@ -1,5 +1,6 @@
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
+import { FONT_STACK, harmonize, scheme, SHAPE } from './m3'
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -204,6 +205,35 @@ export function apply(ctx: Context, config: Config) {
     });
   });
 
+  /*
+   * 外框走中性配色：棋盘皮肤有几十种，外框一旦带上色相，总会和某几张打架。
+   * 这里取一支很淡的暖色相，落在中性色板上，和其它插件同源却不抢棋盘的戏。
+   */
+  const FRAME = scheme(60)
+
+  /** 圆角矩形路径。 */
+  function roundRect(
+    context: any,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ) {
+    const r = Math.max(0, Math.min(radius, width / 2, height / 2))
+    context.beginPath()
+    context.moveTo(x + r, y)
+    context.lineTo(x + width - r, y)
+    context.arcTo(x + width, y, x + width, y + r, r)
+    context.lineTo(x + width, y + height - r)
+    context.arcTo(x + width, y + height, x + width - r, y + height, r)
+    context.lineTo(x + r, y + height)
+    context.arcTo(x, y + height, x, y + height - r, r)
+    context.lineTo(x, y + r)
+    context.arcTo(x, y, x + r, y, r)
+    context.closePath()
+  }
+
   // 棋盘绘制常量
   const CELL_WIDTH = 54 // 棋子宽度
   const ARROW_OFFSET = 33
@@ -227,8 +257,24 @@ export function apply(ctx: Context, config: Config) {
   const ENGINE_TIMEOUT = 120 * 1000
 
   const piecesImgResources = loadPiecesImageResources(config.pieceSkin);
-  const outerFrameImg = fs.readFileSync(path.join(__dirname, 'assets', '棋盘皮肤', `外框.png`));
   const boardSkinImg = fs.readFileSync(path.join(__dirname, 'assets', '棋盘皮肤', `${config.boardSkin}.webp`));
+
+  // 外框的版式：棋盘贴在这张画布的中间，四周留给坐标
+  const FRAME_WIDTH = 620
+  const FRAME_HEIGHT = 780
+  const FRAME_BOARD = { x: 36.5, y: 90, width: 550, height: 605 }
+  /** 棋盘图从 500×550 拉到 550×605，坐标换算要跟着乘这个系数。 */
+  const FRAME_ZOOM = FRAME_BOARD.width / BOARD_WIDTH
+
+  const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
+  /** 红方一侧按中式记谱从右往左数。 */
+  const RED_FILES = ['九', '八', '七', '六', '五', '四', '三', '二', '一']
+
+  /**
+   * 最近一步的箭头。沿用原来那支黄绿色的色相，色调与彩度换成设计系统的取值，
+   * 于是它在几十种棋盘皮肤上都是同一个亮度，不会在深色皮肤上糊掉。
+   */
+  const ARROW_COLOR = harmonize('#80ab45', 58, 56)
 
   const possibleFigureNames = ["将", "士", "象", "车", "马", "炮", "卒", "帅", "仕", "相", "兵"];
 
@@ -1589,15 +1635,61 @@ export function apply(ctx: Context, config: Config) {
     return '';
   }
 
+  /**
+   * 给棋盘套一圈坐标外框。
+   *
+   * 原先这是一张固定配色的位图，可棋盘皮肤有几十种，米黄的外框压在墨色或青瓷的
+   * 棋盘上总有一种会打架。改成按设计系统现画：底色、字色、圆角都来自色板，
+   * 无论用户选了哪张皮肤，外框都是同一套中性调子，字也不会因为放大而发虚。
+   */
   async function createImage(buffer: Buffer): Promise<Buffer> {
-    const canvas = await ctx.canvas.createCanvas(620 * scale, 780 * scale);
+    const canvas = await ctx.canvas.createCanvas(FRAME_WIDTH * scale, FRAME_HEIGHT * scale);
     const context = canvas.getContext('2d');
 
-    const outerFrame = await ctx.canvas.loadImage(outerFrameImg);
-    context.drawImage(outerFrame, 0, 0, 620 * scale, 780 * scale);
+    context.scale(scale, scale);
+
+    // 外框本体：中性表面 + extra-large 圆角
+    context.fillStyle = FRAME.surfaceContainer;
+    roundRect(context, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, SHAPE.extraLarge);
+    context.fill();
 
     const boardImg = await ctx.canvas.loadImage(buffer);
-    context.drawImage(boardImg, 36.5 * scale, 90 * scale, 550 * scale, 605 * scale);
+    context.drawImage(
+      boardImg,
+      FRAME_BOARD.x, FRAME_BOARD.y,
+      FRAME_BOARD.width, FRAME_BOARD.height,
+    );
+
+    // 棋子中心在外框坐标系里的位置，行列标号照着它对齐
+    const columnAt = (col: number) =>
+      FRAME_BOARD.x + (col * CELL_WIDTH + BOARD_PADDING) * FRAME_ZOOM
+    const rowAt = (row: number) =>
+      FRAME_BOARD.y + (row * CELL_WIDTH + BOARD_PADDING) * FRAME_ZOOM
+
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    const label = (text: string, x: number, y: number, size: number, color: string) => {
+      context.font = `600 ${size}px ${FONT_STACK}`;
+      context.fillStyle = color;
+      context.fillText(text, x, y);
+    };
+
+    for (let col = 0; col < 9; col++) {
+      const x = columnAt(isFlipBoard ? 8 - col : col);
+      // 上下各一组：字母用来输入着法，数字是黑方的纵线序号
+      label(FILES[col], x, 30, 22, FRAME.onSurfaceVariant);
+      label(String(col + 1), x, 64, 22, FRAME.outline);
+      label(RED_FILES[col], x, FRAME_HEIGHT - 62, 24, FRAME.onSurfaceVariant);
+      label(FILES[col], x, FRAME_HEIGHT - 26, 22, FRAME.outline);
+    }
+
+    for (let row = 0; row < 10; row++) {
+      const y = rowAt(isFlipBoard ? 9 - row : row);
+      const text = String(9 - row);
+      label(text, 19, y, 22, FRAME.outline);
+      label(text, FRAME_WIDTH - 19, y, 22, FRAME.outline);
+    }
 
     return canvas.toBuffer(imageMimeType);
   }
@@ -2020,7 +2112,7 @@ export function apply(ctx: Context, config: Config) {
       let adjustedEndX = startX + (endX - startX) * (dist - 30) / dist
       let adjustedEndY = startY + (endY - startY) * (dist - 30) / dist;
 
-      await drawLineArrow(context, startX * scale, startY * scale, adjustedEndX * scale, adjustedEndY * scale, "rgba(128, 171, 69, 0.7)", 15 * scale)
+      await drawLineArrow(context, startX * scale, startY * scale, adjustedEndX * scale, adjustedEndY * scale, ARROW_COLOR + 'b3', 15 * scale)
     }
 
     if (moveList.length > 0) {
