@@ -21,7 +21,7 @@ export const usage = `## 使用
 | \`cchess.悔棋 [同意/拒绝]\` | 请求悔棋，也可直接回复同意或拒绝表决 |
 | \`cchess.认输\` | 认输并结束对局 |
 | \`cchess.结束\` | 结束当前对局 |
-| \`cchess.棋绩 [@某人/榜] [胜场/输场] [人数]\` | 查询战绩或排行榜 |
+| \`cchess.战绩 [@某人/榜] [胜场/输场] [人数]\` | 查询战绩或排行榜 |
 | \`cchess.查看云库残局 [DTM/DTC]\` | 查询云库残局统计 |`
 
 export const inject = ['database', 'canvas']
@@ -524,7 +524,7 @@ export function apply(ctx: Context, config: Config) {
       await endGame(channelId);
       return await sendMessage(session, panel({
         icon: '✅',
-        title: '对局已强制结束',
+        title: '对局已结束',
         at: username,
         body: ['棋盘已收，胜负不计。'],
         tips: ['发送「cchess.开始」重整旗鼓'],
@@ -800,7 +800,7 @@ export function apply(ctx: Context, config: Config) {
       }));
     })
 
-  ctx.command('cchess.棋绩 [args:text]', '查询战绩或排行榜')
+  ctx.command('cchess.战绩 [args:text]', '查询战绩或排行榜')
     .usage('带「榜」看排行榜，@ 某人可查看对方战绩。')
     .action(async ({ session }, args) => {
       let { userId, username } = session
@@ -944,7 +944,7 @@ export function apply(ctx: Context, config: Config) {
       title: '榜单人数有误',
       at: username,
       body: ['请输入不小于 0 的整数。'],
-      tips: ['例如：cchess.棋绩 榜 10'],
+      tips: ['例如：cchess.战绩 榜 10'],
     })
   }
 
