@@ -16,7 +16,7 @@ export const usage = `## 使用
 
 | 指令 | 说明 |
 | --- | --- |
-| \`cchess.开始 [红/黑] [人人/人机]\` | 入座并开局，双方就位后自动开战 |
+| \`cchess.开始 [红/黑] [人机]\` | 入座开局，或直接挑战皮卡鱼 |
 | \`cchess.开始 <FEN>\` | 摆谱，导入局面后再 \`cchess.开始\` 即可 |
 | \`cchess.落子 <着法>\` | 按棋谱落子，如 \`炮二平五\` |
 | \`cchess.悔棋 [同意/拒绝]\` | 请求悔棋，也可直接回复同意或拒绝表决 |
@@ -412,8 +412,8 @@ export function apply(ctx: Context, config: Config) {
       await session.execute(`cchess -h`)
     })
 
-  ctx.command('cchess.开始 [args:text]', '入座，双方就位后开局')
-    .usage('可选阵营「红」「黑」与对手「人人」「人机」；直接粘贴 FEN 串则按摆谱处理。')
+  ctx.command('cchess.开始 [args:text]', '入座开局，或挑战皮卡鱼')
+    .usage('可选阵营「红」「黑」；参数含「人机」即与皮卡鱼对战，不带则入座等待对手；直接粘贴 FEN 串则按摆谱处理。')
     .example('cchess.开始 红 人机')
     .action(async ({ session }, args) => {
       const { username, channelId } = session
@@ -503,7 +503,7 @@ export function apply(ctx: Context, config: Config) {
           field('阵营', withSideIcon(selfSide)) + '　' + field('当前人数', `${players.length} 人`),
           !blackPlayers.length ? '黑方尚无人。' : '红方尚无人。',
         ],
-        tips: ['好友发送「cchess.开始」即可补位，指定阵营可发「cchess.开始 黑」'],
+        tips: ['好友发送「cchess.开始」补位 · 等不到对手时发「cchess.开始 人机」挑战皮卡鱼'],
       }));
     }
 
