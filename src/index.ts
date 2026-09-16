@@ -31,6 +31,7 @@ export interface Config {
   pieceSkin: string
   defaultEngineThinkingDepth: number
   allowFreePieceMovementInHumanMachineMode: boolean
+  enableDirectInput: boolean
   defaultMaxLeaderboardEntries: number
   retractDelay: number
   isChessImageWithOutlineEnabled: boolean
@@ -45,6 +46,7 @@ export const Config: Schema<Config> = Schema.object({
   boardSkin: Schema.union(boardSkins).default('象甲2023棋盘').description(`棋盘皮肤。`),
   pieceSkin: Schema.union(pieceSkins).default('象甲棋子').description(`棋子皮肤。`),
   allowFreePieceMovementInHumanMachineMode: Schema.boolean().default(false).description(`人机模式下，允许所有人自由移动棋子，开启后可以不入座直接开始人机对局。`),
+  enableDirectInput: Schema.boolean().default(true).description(`对局中直接发送棋谱或「同意」「拒绝」即可落子与应答，无需指令前缀。`),
   defaultEngineThinkingDepth: Schema.number().min(0).max(100).default(10).description(`默认引擎思考深度，越高 AI 棋力越强，耗时也越长（小于 1 时按 1 计算）。由于 Nodejs 不支持 SIMD，所以不建议设置过高。`),
   defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`排行榜默认显示的人数。`),
   retractDelay: Schema.number().min(0).default(0).description(`自动撤回延迟（秒），0 表示不撤回。`),
@@ -54,8 +56,6 @@ export const Config: Schema<Config> = Schema.object({
 }) as any
 
 // --- 消息排版 ---
-
-const RULE = '━━━━━━━━━━━━━━'
 
 const SIDE_ICONS: Record<string, string> = { 红方: '🔴', 黑方: '⚫' }
 
@@ -93,14 +93,14 @@ function isLine(line: Line): line is string {
   return typeof line === 'string'
 }
 
-/** 统一的消息排版：标题 · 分隔线 · 正文 · 提示 · 图片。 */
+/** 统一的消息排版：标题 · 正文 · 提示 · 图片。 */
 function panel(options: PanelOptions): string {
   const { icon = '♟️', title, at, body = [], tips = [], image } = options
-  const lines: string[] = [`${icon} ${title}`, RULE]
+  const lines: string[] = [`${icon} ${title}`]
   if (at) lines.push(`@${at}`)
   lines.push(...body.filter(isLine))
   const validTips = tips.filter(isLine).filter(Boolean)
-  if (validTips.length) lines.push(RULE, ...validTips)
+  if (validTips.length) lines.push( ...validTips)
   if (image) lines.push(image)
   return lines.join('\n')
 }
@@ -357,6 +357,7 @@ export function apply(ctx: Context, config: Config) {
 
   // 中间件：悔棋表决。仅当频道内有待决请求、且发言者正是应答方时才响应
   ctx.middleware(async (session, next) => {
+    if (!config.enableDirectInput) return next();
     const { channelId, content, userId } = session;
     // 先做零成本的文本判断，避免为每一条消息访问数据库
     if (!channelId || !content) return next();
@@ -374,6 +375,7 @@ export function apply(ctx: Context, config: Config) {
 
   // 中间件：处理直接输入棋谱的情况
   ctx.middleware(async (session, next) => {
+    if (!config.enableDirectInput) return next();
     const { channelId, content, userId, username } = session;
     // 先做零成本的文本判断，避免为每一条消息访问数据库
     if (!channelId || !content) return next();
@@ -514,7 +516,7 @@ export function apply(ctx: Context, config: Config) {
 
       if (!gameRecord.isStarted) {
         return await sendMessage(session, panel({
-          icon: '⚠️',
+          icon: '💡',
           title: '棋盘尚且空空',
           at: username,
           body: ['当前没有进行中的对局，无需收拾残局。'],
@@ -542,7 +544,7 @@ export function apply(ctx: Context, config: Config) {
     if (busyChannels.has(channelId)) {
       return await sendMessage(session, panel({
         icon: '⏳',
-        title: '棋局正在推演',
+        title: '对局正在推演',
         at: username,
         body: ['上一着棋尚未结算，稍候片刻。'],
       }));
@@ -559,7 +561,7 @@ export function apply(ctx: Context, config: Config) {
           icon: '⏳',
           title: '悔棋请求待决',
           at: username,
-          body: ['对方的悔棋请求尚未答复，棋局暂歇。'],
+          body: ['对方的悔棋请求尚未答复，对局暂歇。'],
           tips: ['对方回复「同意」或「拒绝」即可表决'],
         }));
       }
@@ -711,8 +713,8 @@ export function apply(ctx: Context, config: Config) {
       }
       if (gameRecord.moveList.length < 1) {
         return await sendMessage(session, panel({
-          icon: '⚠️',
-          title: '棋局初开',
+          icon: '💡',
+          title: '对局初开',
           at: username,
           body: ['一子未落，无悔可言。'],
         }));
@@ -740,12 +742,24 @@ export function apply(ctx: Context, config: Config) {
         }));
       }
       await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: true })
+      // 请求要有终点：等不到表决就自己收场
+      ctx.setTimeout(async () => {
+        const current = await getGameRecord(channelId);
+        if (!current?.isRegretRequest) return
+        await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
+        await sendMessage(session, panel({
+          icon: '⏳',
+          title: '悔棋请求已作罢',
+          body: ['等了 30 秒没有等到答复，请求自动撤回。'],
+          tips: ['发送「cchess.悔棋」可以再提一次。'],
+        }))
+      }, 30 * 1000)
       return await sendMessage(session, panel({
         icon: '⏳',
         title: '悔棋请求已送出',
         at: username,
         body: [field('等待答复', withSideIcon(sideString))],
-        tips: ['对方回复「同意」或「拒绝」即可表决'],
+        tips: ['对方回复「同意」或「拒绝」即可表决；30 秒等不到答复会自动作废'],
       }));
     })
 
@@ -823,7 +837,7 @@ export function apply(ctx: Context, config: Config) {
           session,
           byLose ? 'lose' : 'win',
           byLose ? '总输场排行榜' : '总胜场排行榜',
-          byLose ? '🍂' : '🏆',
+          '📋',
           size,
         );
       }
@@ -843,7 +857,7 @@ export function apply(ctx: Context, config: Config) {
           win: 0,
         })
         return await sendMessage(session, panel({
-          icon: '🔍',
+          icon: '📋',
           title: '棋士档案',
           at: session.username,
           body: [field('查询对象', username), '尚无对局记录，静待首战。'],
@@ -854,7 +868,7 @@ export function apply(ctx: Context, config: Config) {
       const total = win + lose
       const winRate = total === 0 ? '—' : `${(win / total * 100).toFixed(1)}%`
       return await sendMessage(session, panel({
-        icon: '🔍',
+        icon: '📋',
         title: '棋士档案',
         at: session.username,
         body: [
@@ -871,8 +885,8 @@ export function apply(ctx: Context, config: Config) {
 
   function notStartedPanel(username: string): string {
     return panel({
-      icon: '⚠️',
-      title: '棋局尚未开始',
+      icon: '💡',
+      title: '对局尚未开始',
       at: username,
       body: ['当前频道还没有进行中的对局。'],
       tips: ['「cchess.开始」入座并对弈', '「cchess.开始 人机」挑战皮卡鱼'],
@@ -881,8 +895,8 @@ export function apply(ctx: Context, config: Config) {
 
   function alreadyStartedPanel(username: string): string {
     return panel({
-      icon: '⚠️',
-      title: '棋局已经开战',
+      icon: '💡',
+      title: '对局已经开战',
       at: username,
       body: ['本局尚未结束，不必重开。'],
       tips: ['「cchess.认输」结束本局', '「cchess.结束」强制清盘'],
@@ -891,7 +905,7 @@ export function apply(ctx: Context, config: Config) {
 
   function notJoinedPanel(username: string): string {
     return panel({
-      icon: '⚠️',
+      icon: '💡',
       title: '你尚未入座',
       at: username,
       body: ['先入座，才好落子。'],
@@ -910,7 +924,7 @@ export function apply(ctx: Context, config: Config) {
 
   function notYourTurnPanel(username: string, yourSide: string, currentSide: string): string {
     return panel({
-      icon: '⚠️',
+      icon: '⏳',
       title: '尚未轮到你',
       at: username,
       body: [field('你的阵营', withSideIcon(yourSide)), field('当前轮走', withSideIcon(currentSide))],
@@ -920,7 +934,7 @@ export function apply(ctx: Context, config: Config) {
 
   function invalidMovePanel(username: string, reason: string): string {
     return panel({
-      icon: '❌',
+      icon: '⚠️',
       title: reason,
       at: username,
       body: ['请确认着法是否合乎棋规。'],
@@ -941,7 +955,7 @@ export function apply(ctx: Context, config: Config) {
   function invalidLeaderboardSizePanel(username: string): string {
     return panel({
       icon: '⚠️',
-      title: '榜单人数有误',
+      title: '排行榜人数有误',
       at: username,
       body: ['请输入不小于 0 的整数。'],
       tips: ['例如：cchess.战绩 榜 10'],
@@ -951,8 +965,14 @@ export function apply(ctx: Context, config: Config) {
   // --- 辅助函数 ---
 
   /** 渲染当前棋盘并封装为图片元素。 */
-  async function renderBoard(channelId: string): Promise<string> {
-    return h.image(await drawChessBoard(channelId), imageMimeType).toString()
+  /** 出图失败时返回 undefined，panel 会照常发文本，不让一局卡在渲染上。 */
+  async function renderBoard(channelId: string): Promise<string | undefined> {
+    try {
+      return h.image(await drawChessBoard(channelId), imageMimeType).toString()
+    } catch (error) {
+      logger.warn('棋盘渲染失败，本次只发文本：%s', error.message)
+      return undefined
+    }
   }
 
   /** 结算战绩、收起棋盘，并生成战报。 */
@@ -1035,7 +1055,7 @@ export function apply(ctx: Context, config: Config) {
     }));
   }
 
-  /** 兑现悔棋表决：同意则回退一着，拒绝则棋局继续。 */
+  /** 兑现悔棋表决：同意则回退一着，拒绝则对局继续。 */
   async function resolveRegret(session: Session, agree: boolean): Promise<void> {
     const { username, userId, channelId } = session
     await updateNameInPlayerRecord(userId, username)
@@ -1068,7 +1088,7 @@ export function apply(ctx: Context, config: Config) {
         icon: '⚠️',
         title: '悔棋被拒',
         at: username,
-        body: ['落子无悔，棋局继续。'],
+        body: ['落子无悔，对局继续。'],
         image: await renderBoard(channelId),
       }));
     }
