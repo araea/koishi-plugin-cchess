@@ -19,10 +19,10 @@ export const usage = `## 使用
 | \`cchess.开始 [红/黑] [人人/人机]\` | 入座并开局，双方就位后自动开战 |
 | \`cchess.开始 <FEN>\` | 摆谱，导入局面后再 \`cchess.开始\` 即可 |
 | \`cchess.悔棋 [同意/拒绝]\` | 请求悔棋，也可直接回复同意或拒绝表决 |
-| \`cchess.认输\` | 认输 |
-| \`cchess.结束\` | 强制结束棋局 |
-| \`cchess.棋绩 [@某人/榜] [胜场/输场] [人数]\` | 查询战绩与排行榜 |
-| \`cchess.查看云库残局 [DTM/DTC]\` | 云库残局统计 |`
+| \`cchess.认输\` | 认输并结束对局 |
+| \`cchess.结束\` | 结束当前对局 |
+| \`cchess.棋绩 [@某人/榜] [胜场/输场] [人数]\` | 查询战绩或排行榜 |
+| \`cchess.查看云库残局 [DTM/DTC]\` | 查询云库残局统计 |`
 
 export const inject = ['database', 'canvas']
 
@@ -44,13 +44,13 @@ const boardSkins: string[] = ["棋弈无限红绿棋盘", "一鸣惊人棋盘", 
 export const Config: Schema<Config> = Schema.object({
   boardSkin: Schema.union(boardSkins).default('象甲2023棋盘').description(`棋盘皮肤。`),
   pieceSkin: Schema.union(pieceSkins).default('象甲棋子').description(`棋子皮肤。`),
-  allowFreePieceMovementInHumanMachineMode: Schema.boolean().default(false).description(`是否允许在人机模式下所有用户都可以自由移动棋子，开启后可以不入座直接开始人机对局。`),
+  allowFreePieceMovementInHumanMachineMode: Schema.boolean().default(false).description(`人机模式下，允许所有人自由移动棋子，开启后可以不入座直接开始人机对局。`),
   defaultEngineThinkingDepth: Schema.number().min(0).max(100).default(10).description(`默认引擎思考深度，越高 AI 棋力越强，耗时也越长（小于 1 时按 1 计算）。由于 Nodejs 不支持 SIMD，所以不建议设置过高。`),
-  defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`显示排行榜时默认的最大人数。`),
-  retractDelay: Schema.number().min(0).default(0).description(`自动撤回等待的时间，单位是秒。值为 0 时不启用自动撤回功能。`),
+  defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`排行榜默认显示的人数。`),
+  retractDelay: Schema.number().min(0).default(0).description(`自动撤回延迟（秒），0 表示不撤回。`),
   imgScale: Schema.number().min(1).default(1).description(`图片分辨率倍率。`),
-  imageType: Schema.union(['png', 'jpeg', 'webp']).default('png').description(`发送的图片类型。`),
-  isChessImageWithOutlineEnabled: Schema.boolean().default(true).description(`是否为象棋图片添加辅助外框，关闭后可以显著提升图片速度，但无辅助外框，玩起来可能会比较累。`),
+  imageType: Schema.union(['png', 'jpeg', 'webp']).default('png').description(`发送的图片格式。`),
+  isChessImageWithOutlineEnabled: Schema.boolean().default(true).description(`给棋盘图片加上坐标外框。关闭后出图明显更快，但没有外框，玩起来可能会比较累。`),
 }) as any
 
 // --- 消息排版 ---
@@ -400,12 +400,14 @@ export function apply(ctx: Context, config: Config) {
     await handleMove(session, moveOperation);
   });
 
-  ctx.command('cchess', '中国象棋游戏指令帮助')
+  ctx.command('cchess', '中国象棋 · 楚河汉界')
     .action(async ({ session }) => {
       await session.execute(`cchess -h`)
     })
 
-  ctx.command('cchess.开始 [args:text]', '入座并开局；可选「红 / 黑」「人人 / 人机」，也可直接粘贴 FEN 摆谱')
+  ctx.command('cchess.开始 [args:text]', '入座并开局')
+    .usage('可选阵营「红」「黑」与对手「人人」「人机」；直接粘贴 FEN 串则按摆谱处理。')
+    .example('cchess.开始 红 人机')
     .action(async ({ session }, args) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -504,7 +506,7 @@ export function apply(ctx: Context, config: Config) {
       }));
     })
 
-  ctx.command('cchess.结束', '强制结束游戏')
+  ctx.command('cchess.结束', '结束当前对局')
     .action(async ({ session }) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -542,7 +544,7 @@ export function apply(ctx: Context, config: Config) {
         icon: '⏳',
         title: '棋局正在推演',
         at: username,
-        body: ['上一着棋尚未结算，请稍候片刻。'],
+        body: ['上一着棋尚未结算，稍候片刻。'],
       }));
     }
 
@@ -669,7 +671,8 @@ export function apply(ctx: Context, config: Config) {
     }
   }
 
-  ctx.command('cchess.悔棋 [decision:string]', '请求悔棋；待决时由对方以「同意 / 拒绝」表决')
+  ctx.command('cchess.悔棋 [decision:string]', '请求悔棋或答复对方')
+    .usage('请求送出后，对方直接回复「同意」或「拒绝」即可表决，无需指令前缀。')
     .action(async ({ session }, decision) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -746,7 +749,7 @@ export function apply(ctx: Context, config: Config) {
       }));
     })
 
-  ctx.command('cchess.认输', '认输')
+  ctx.command('cchess.认输', '认输并结束对局')
     .action(async ({ session }) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -781,7 +784,8 @@ export function apply(ctx: Context, config: Config) {
       return await sendMessage(session, message);
     })
 
-  ctx.command('cchess.查看云库残局 [type:string]', '云库残局 DTM / DTC 统计')
+  ctx.command('cchess.查看云库残局 [type:string]', '查询云库残局统计')
+    .usage('参数可填「DTM」或「DTC」，缺省为 DTM。')
     .action(async ({ session }, type) => {
       const { username, userId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -796,7 +800,8 @@ export function apply(ctx: Context, config: Config) {
       }));
     })
 
-  ctx.command('cchess.棋绩 [args:text]', '查询战绩；带「榜」看排行榜，@某人 可查看对方战绩')
+  ctx.command('cchess.棋绩 [args:text]', '查询战绩或排行榜')
+    .usage('带「榜」看排行榜，@ 某人可查看对方战绩。')
     .action(async ({ session }, args) => {
       let { userId, username } = session
       await updateNameInPlayerRecord(userId, username)
@@ -889,7 +894,7 @@ export function apply(ctx: Context, config: Config) {
       icon: '⚠️',
       title: '你尚未入座',
       at: username,
-      body: ['请先入座再落子。'],
+      body: ['先入座，才好落子。'],
       tips: ['发送「cchess.开始」入座'],
     })
   }
@@ -899,7 +904,7 @@ export function apply(ctx: Context, config: Config) {
       icon: '⏳',
       title: '皮卡鱼正在推演',
       at: username,
-      body: ['引擎正在计算局面，请稍候再试。'],
+      body: ['引擎正在计算局面，稍候再试。'],
     })
   }
 
