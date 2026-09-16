@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-cchess",
-  "description": "Koishi 的中国象棋插件。",
-  "version": "2.2.0",
+  "description": "Koishi 插件 · 中国象棋。",
+  "version": "2.2.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
