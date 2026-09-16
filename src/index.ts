@@ -1684,16 +1684,16 @@ export function apply(ctx: Context, config: Config) {
       const x = columnAt(isFlipBoard ? 8 - col : col);
       // 上下各一组：字母用来输入着法，数字是黑方的纵线序号
       label(FILES[col], x, 30, 22, FRAME.onSurfaceVariant);
-      label(String(col + 1), x, 64, 22, FRAME.outline);
+      label(String(col + 1), x, 64, 22, FRAME.onSurfaceVariant);
       label(RED_FILES[col], x, FRAME_HEIGHT - 62, 24, FRAME.onSurfaceVariant);
-      label(FILES[col], x, FRAME_HEIGHT - 26, 22, FRAME.outline);
+      label(FILES[col], x, FRAME_HEIGHT - 26, 22, FRAME.onSurfaceVariant);
     }
 
     for (let row = 0; row < 10; row++) {
       const y = rowAt(isFlipBoard ? 9 - row : row);
       const text = String(9 - row);
-      label(text, 19, y, 22, FRAME.outline);
-      label(text, FRAME_WIDTH - 19, y, 22, FRAME.outline);
+      label(text, 19, y, 22, FRAME.onSurfaceVariant);
+      label(text, FRAME_WIDTH - 19, y, 22, FRAME.onSurfaceVariant);
     }
 
     return canvas.toBuffer(imageMimeType);
