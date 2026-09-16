@@ -1,6 +1,6 @@
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
-import { FONT_STACK, harmonize, scheme, SHAPE } from './m3'
+import { EMPHASIZED_WEIGHT, FONT_STACK, harmonize, scheme, SHAPE, TYPE } from './m3'
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -8,9 +8,9 @@ export const name = 'cchess'
 
 export const usage = `## 使用
 
-\`cchess.开始\` 即可入座，双方就位后自动开局；\`cchess.开始 人机\` 直接挑战皮卡鱼。着法可直接发送，例如 \`炮二平五\` 或 \`b2e2\`。
+\`cchess.开始\` 即可入座，双方就位后自动开局；\`cchess.开始 人机\` 直接挑战皮卡鱼。着法可直接发送，例如 \`炮二平五\` 或 \`b2e2\`，也可以写成 \`cchess.落子 炮二平五\`。
 
-悔棋请求送出后，对方无需带指令前缀，直接回复 \`同意\` 或 \`拒绝\` 即可表决。
+悔棋请求送出后，对方无需带指令前缀，直接回复 \`同意\` 或 \`拒绝\` 即可表决；请求方发送 \`cchess.悔棋 拒绝\` 可撤下请求。
 
 ## 指令
 
@@ -18,9 +18,10 @@ export const usage = `## 使用
 | --- | --- |
 | \`cchess.开始 [红/黑] [人人/人机]\` | 入座并开局，双方就位后自动开战 |
 | \`cchess.开始 <FEN>\` | 摆谱，导入局面后再 \`cchess.开始\` 即可 |
+| \`cchess.落子 <着法>\` | 按棋谱落子，如 \`炮二平五\` |
 | \`cchess.悔棋 [同意/拒绝]\` | 请求悔棋，也可直接回复同意或拒绝表决 |
 | \`cchess.认输\` | 认输并结束对局 |
-| \`cchess.结束\` | 结束当前对局 |
+| \`cchess.结束\` | 结束正在进行的一局 |
 | \`cchess.战绩 [@某人/榜] [胜场/输场] [人数]\` | 查询战绩或排行榜 |
 | \`cchess.查看云库残局 [DTM/DTC]\` | 查询云库残局统计 |`
 
@@ -35,6 +36,7 @@ export interface Config {
   defaultMaxLeaderboardEntries: number
   retractDelay: number
   isChessImageWithOutlineEnabled: boolean
+  disableImages: boolean
   imgScale: number
   imageType: "png" | "jpeg" | "webp"
 }
@@ -48,11 +50,12 @@ export const Config: Schema<Config> = Schema.object({
   allowFreePieceMovementInHumanMachineMode: Schema.boolean().default(false).description(`人机模式下，允许所有人自由移动棋子，开启后可以不入座直接开始人机对局。`),
   enableDirectInput: Schema.boolean().default(true).description(`对局中直接发送棋谱或「同意」「拒绝」即可落子与应答，无需指令前缀。`),
   defaultEngineThinkingDepth: Schema.number().min(0).max(100).default(10).description(`默认引擎思考深度，越高 AI 棋力越强，耗时也越长（小于 1 时按 1 计算）。由于 Nodejs 不支持 SIMD，所以不建议设置过高。`),
-  defaultMaxLeaderboardEntries: Schema.number().min(0).default(10).description(`排行榜默认显示的人数。`),
+  defaultMaxLeaderboardEntries: Schema.number().min(0).default(4).description(`排行榜默认显示的人数。`),
   retractDelay: Schema.number().min(0).default(0).description(`自动撤回延迟（秒），0 表示不撤回。`),
   imgScale: Schema.number().min(1).default(1).description(`图片分辨率倍率。`),
   imageType: Schema.union(['png', 'jpeg', 'webp']).default('png').description(`发送的图片格式。`),
   isChessImageWithOutlineEnabled: Schema.boolean().default(true).description(`给棋盘图片加上坐标外框。关闭后出图明显更快，但没有外框，玩起来可能会比较累。`),
+  disableImages: Schema.boolean().default(false).description(`全部改用文本，不发送棋盘图片。`),
 }) as any
 
 // --- 消息排版 ---
@@ -74,8 +77,8 @@ function field(key: string, value: string | number): string {
 type Line = string | false | null | undefined
 
 interface PanelOptions {
-  /** 标题前的图标。 */
-  icon?: string
+  /** 标题前的图标，取自状态符号表。 */
+  icon: string
   /** 消息标题。 */
   title: string
   /** 需要提醒的用户名。 */
@@ -95,7 +98,7 @@ function isLine(line: Line): line is string {
 
 /** 统一的消息排版：标题 · 正文 · 提示 · 图片。 */
 function panel(options: PanelOptions): string {
-  const { icon = '♟️', title, at, body = [], tips = [], image } = options
+  const { icon, title, at, body = [], tips = [], image } = options
   const lines: string[] = [`${icon} ${title}`]
   if (at) lines.push(`@${at}`)
   lines.push(...body.filter(isLine))
@@ -192,6 +195,8 @@ export function apply(ctx: Context, config: Config) {
   const enginePromises: { [channelId: string]: Promise<void> } = {};
   /** 正在结算的频道，避免同一频道内的落子相互覆盖。 */
   const busyChannels = new Set<string>();
+  /** 悔棋请求的序号：每个频道只认最新一次，旧请求的定时器不碰新局面。 */
+  const regretTicket = new Map<string, number>();
 
   ctx.on('dispose', () => {
     const channelIds = Object.keys(engines);
@@ -407,108 +412,118 @@ export function apply(ctx: Context, config: Config) {
       await session.execute(`cchess -h`)
     })
 
-  ctx.command('cchess.开始 [args:text]', '入座并开局')
+  ctx.command('cchess.开始 [args:text]', '入座，双方就位后开局')
     .usage('可选阵营「红」「黑」与对手「人人」「人机」；直接粘贴 FEN 串则按摆谱处理。')
     .example('cchess.开始 红 人机')
     .action(async ({ session }, args) => {
-      const { username, userId, channelId } = session
-      await updateNameInPlayerRecord(userId, username)
-
-      const gameRecord = await getGameRecord(channelId);
-      if (gameRecord.isStarted) {
-        return await sendMessage(session, alreadyStartedPanel(username));
+      const { username, channelId } = session
+      if (busyChannels.has(channelId)) {
+        return await sendMessage(session, busyPanel(username));
       }
-
-      const text = (args ?? '').trim()
-
-      // 参数整体是合法 FEN 串时，按摆谱处理，摆好后开局仍是同一条指令
-      if (text && isValidateFen(text)) {
-        const startFen = text.includes('moves') ? text.split('moves')[0].trim() : text
-        await ctx.database.set('cchess_game_records', { channelId }, {
-          turn: fenToTurn(text),
-          board: fenToBoard(text),
-          moveList: [],
-          movesAfterLastEat: [],
-          boardAfterLastEat: fenToBoard(text),
-          turnAfterLastEat: fenToTurn(text),
-          lastMove: null,
-          isHistoryMode: false,
-          originalState: {},
-          startFen,
-        })
-        await parseFen(channelId, text)
-        const record = await getGameRecord(channelId);
-        return await sendMessage(session, panel({
-          icon: '✅',
-          title: '棋盘摆放完毕',
-          at: username,
-          body: [field('轮走方', withSideIcon(convertTurnToString(record.turn)))],
-          tips: ['发送「cchess.开始」由此局面开战'],
-          image: await renderBoard(channelId),
-        }));
+      busyChannels.add(channelId);
+      try {
+        return await startGame(session, args);
+      } finally {
+        busyChannels.delete(channelId);
       }
-
-      if (text.includes('红') && text.includes('黑')) {
-        return await sendMessage(session, panel({
-          icon: '⚠️',
-          title: '一次只能选一方',
-          at: username,
-          body: ['请只选择红方或黑方。'],
-          tips: ['「cchess.开始 红」执红先行', '「cchess.开始 黑」执黑应招'],
-        }));
-      }
-
-      const chosenSide = text.includes('红') ? '红方' : text.includes('黑') ? '黑方' : ''
-
-      // 在后台预热引擎，避免首次落子时长时间等待
-      void checkEngine(channelId);
-
-      // 人机对战：入座与开局一步到位
-      if (/机|电脑|ai|engine|pve/i.test(text)) {
-        const players = await seatPlayer(channelId, userId, username, chosenSide)
-        return await startVersusEngine(session, gameRecord, players)
-      }
-
-      // 人人对战：先落座或换边，双方就位即自动开局，省去额外的开局指令
-      const players = await seatPlayer(channelId, userId, username, chosenSide)
-      const redPlayers = players.filter((player) => player.side === '红方');
-      const blackPlayers = players.filter((player) => player.side === '黑方');
-      const selfSide = players.find((player) => player.userId === userId)?.side ?? ''
-
-      if (!redPlayers.length || !blackPlayers.length) {
-        return await sendMessage(session, panel({
-          icon: '⏳',
-          title: '已入座，静候对手',
-          at: username,
-          body: [
-            field('阵营', withSideIcon(selfSide)),
-            field('当前人数', `${players.length} 人`),
-            !blackPlayers.length ? '黑方尚无人。' : '红方尚无人。',
-          ],
-          tips: ['好友发送「cchess.开始」补位，双方就位即自动开局', '「cchess.开始 黑」可指定阵营'],
-        }));
-      }
-
-      await ctx.database.set('cchess_game_records', { channelId }, { isStarted: true })
-      const sideString = convertTurnToString(gameRecord.turn);
-      return await sendMessage(session, panel({
-        icon: '✅',
-        title: '楚河汉界，对局开始',
-        body: [
-          `${withSideIcon('红方')}（${redPlayers.length}）`,
-          ...redPlayers.map((player) => `　@${player.username}`),
-          '',
-          `${withSideIcon('黑方')}（${blackPlayers.length}）`,
-          ...blackPlayers.map((player) => `　@${player.username}`),
-          '',
-          field('先手', withSideIcon(sideString)),
-        ],
-        tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
-        image: await renderBoard(channelId),
-      }));
     })
 
-  ctx.command('cchess.结束', '结束当前对局')
+  /** 入座、摆谱与开局的完整流程，在频道锁内执行。 */
+  async function startGame(session: Session, args: string) {
+    const { username, userId, channelId } = session
+    await updateNameInPlayerRecord(userId, username)
+
+    const gameRecord = await getGameRecord(channelId);
+    if (gameRecord.isStarted) {
+      return await sendMessage(session, alreadyStartedPanel(username));
+    }
+
+    const text = (args ?? '').trim()
+
+    // 参数整体是合法 FEN 串时，按摆谱处理，摆好后开局仍是同一条指令
+    if (text && isValidateFen(text)) {
+      const startFen = text.includes('moves') ? text.split('moves')[0].trim() : text
+      await ctx.database.set('cchess_game_records', { channelId }, {
+        turn: fenToTurn(text),
+        board: fenToBoard(text),
+        moveList: [],
+        movesAfterLastEat: [],
+        boardAfterLastEat: fenToBoard(text),
+        turnAfterLastEat: fenToTurn(text),
+        lastMove: null,
+        isHistoryMode: false,
+        originalState: {},
+        startFen,
+      })
+      await parseFen(channelId, text)
+      const record = await getGameRecord(channelId);
+      return await sendMessage(session, panel({
+        icon: '✅',
+        title: '棋盘摆放完毕',
+        at: username,
+        body: [field('轮走方', withSideIcon(convertTurnToString(record.turn)))],
+        tips: ['发送「cchess.开始」由此局面开战'],
+        image: await renderBoard(channelId),
+      }));
+    }
+
+    if (text.includes('红') && text.includes('黑')) {
+      return await sendMessage(session, panel({
+        icon: '⚠️',
+        title: '一次只能选一方',
+        at: username,
+        body: ['请只选择红方或黑方。'],
+        tips: ['「cchess.开始 红」执红先行', '「cchess.开始 黑」执黑应招'],
+      }));
+    }
+
+    const chosenSide = text.includes('红') ? '红方' : text.includes('黑') ? '黑方' : ''
+
+    // 在后台预热引擎，避免首次落子时长时间等待
+    void checkEngine(channelId);
+
+    // 人机对战：入座与开局一步到位
+    if (/机|电脑|ai|engine|pve/i.test(text)) {
+      const players = await seatPlayer(channelId, userId, username, chosenSide)
+      return await startVersusEngine(session, gameRecord, players)
+    }
+
+    // 人人对战：先落座或换边，双方就位即自动开局，省去额外的开局指令
+    const players = await seatPlayer(channelId, userId, username, chosenSide)
+    const redPlayers = players.filter((player) => player.side === '红方');
+    const blackPlayers = players.filter((player) => player.side === '黑方');
+    const selfSide = players.find((player) => player.userId === userId)?.side ?? ''
+
+    if (!redPlayers.length || !blackPlayers.length) {
+      return await sendMessage(session, panel({
+        icon: '⏳',
+        title: '已入座，静候对手',
+        at: username,
+        body: [
+          field('阵营', withSideIcon(selfSide)) + '　' + field('当前人数', `${players.length} 人`),
+          !blackPlayers.length ? '黑方尚无人。' : '红方尚无人。',
+        ],
+        tips: ['好友发送「cchess.开始」即可补位，指定阵营可发「cchess.开始 黑」'],
+      }));
+    }
+
+    await ctx.database.set('cchess_game_records', { channelId }, { isStarted: true })
+    const sideString = convertTurnToString(gameRecord.turn);
+    return await sendMessage(session, panel({
+      icon: '✅',
+      title: '楚河汉界，对局开始',
+      body: [
+        `${withSideIcon('红方')} · ${redPlayers.map((player) => `@${player.username}`).join('、')}`,
+        `${withSideIcon('黑方')} · ${blackPlayers.map((player) => `@${player.username}`).join('、')}`,
+        `先手 · ${withSideIcon(sideString)}`,
+      ],
+      tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
+      image: await renderBoard(channelId),
+    }));
+  }
+
+  ctx.command('cchess.结束', '结束正在进行的一局')
+    .userFields(['id', 'name', 'authority'])
     .action(async ({ session }) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -523,7 +538,27 @@ export function apply(ctx: Context, config: Config) {
           tips: ['发送「cchess.开始」入座，再开一局'],
         }));
       }
-      await endGame(channelId);
+
+      // 破坏性操作：只放行本局棋手，其余人要权限 2
+      const playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
+      if (!playerRecord.length && (session.user?.authority ?? 0) < 2) {
+        return await sendMessage(session, panel({
+          icon: '⚠️',
+          title: '权限不够',
+          at: username,
+          body: ['只有本局棋手或权限 2 以上的人能结束这一局。'],
+        }));
+      }
+
+      if (busyChannels.has(channelId)) {
+        return await sendMessage(session, busyPanel(username));
+      }
+      busyChannels.add(channelId);
+      try {
+        await endGame(channelId);
+      } finally {
+        busyChannels.delete(channelId);
+      }
       return await sendMessage(session, panel({
         icon: '✅',
         title: '对局已结束',
@@ -531,6 +566,13 @@ export function apply(ctx: Context, config: Config) {
         body: ['棋盘已收，胜负不计。'],
         tips: ['发送「cchess.开始」重整旗鼓'],
       }));
+    })
+
+  ctx.command('cchess.落子 [move:string]', '发送着法，如「炮二平五」')
+    .usage('着法可用中式纵线记谱，也可用坐标，如 `b2e2`。')
+    .example('cchess.落子 炮二平五')
+    .action(async ({ session }, move) => {
+      return await handleMove(session, move);
     })
 
   /** 落子。既可由指令触发，也由中间件在收到裸着法时直接调用。 */
@@ -542,12 +584,7 @@ export function apply(ctx: Context, config: Config) {
       return await sendMessage(session, invalidMovePanel(username, '看不懂这一着'));
     }
     if (busyChannels.has(channelId)) {
-      return await sendMessage(session, panel({
-        icon: '⏳',
-        title: '对局正在推演',
-        at: username,
-        body: ['上一着棋尚未结算，稍候片刻。'],
-      }));
+      return await sendMessage(session, busyPanel(username));
     }
 
     busyChannels.add(channelId);
@@ -661,6 +698,7 @@ export function apply(ctx: Context, config: Config) {
 
       const newMoves = record.moveList.slice(movesBefore);
       return await sendMessage(session, panel({
+        icon: '✅',
         title: `第 ${record.moveList.length} 手`,
         body: [
           ...newMoves.map((move) => `${withSideIcon(convertTurnToString(move.side))}　${move.chnMoveName}　${move.move}`),
@@ -674,7 +712,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.command('cchess.悔棋 [decision:string]', '请求悔棋或答复对方')
-    .usage('请求送出后，对方直接回复「同意」或「拒绝」即可表决，无需指令前缀。')
+    .usage('请求送出后，对方直接回复「同意」或「拒绝」即可表决，无需指令前缀；请求方发送「cchess.悔棋 拒绝」可撤下请求。')
     .action(async ({ session }, decision) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -742,8 +780,11 @@ export function apply(ctx: Context, config: Config) {
         }));
       }
       await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: true })
-      // 请求要有终点：等不到表决就自己收场
+      // 请求要有终点：等不到表决就自己收场。记一张票，免得这个定时器误杀后来的请求
+      const ticket = (regretTicket.get(channelId) ?? 0) + 1
+      regretTicket.set(channelId, ticket)
       ctx.setTimeout(async () => {
+        if (regretTicket.get(channelId) !== ticket) return
         const current = await getGameRecord(channelId);
         if (!current?.isRegretRequest) return
         await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
@@ -758,12 +799,15 @@ export function apply(ctx: Context, config: Config) {
         icon: '⏳',
         title: '悔棋请求已送出',
         at: username,
-        body: [field('等待答复', withSideIcon(sideString))],
-        tips: ['对方回复「同意」或「拒绝」即可表决；30 秒等不到答复会自动作废'],
+        body: [
+          field('等待答复', withSideIcon(sideString)),
+          '对方回复「同意」或「拒绝」即可表决，30 秒等不到答复会自动作废。',
+        ],
+        tips: ['发送「cchess.悔棋 拒绝」可撤下这次请求'],
       }));
     })
 
-  ctx.command('cchess.认输', '认输并结束对局')
+  ctx.command('cchess.认输', '认输并判对方获胜')
     .action(async ({ session }) => {
       const { username, userId, channelId } = session
       await updateNameInPlayerRecord(userId, username)
@@ -873,10 +917,8 @@ export function apply(ctx: Context, config: Config) {
         at: session.username,
         body: [
           field('查询对象', username),
-          field('胜　场', `${win} 局`),
-          field('负　场', `${lose} 局`),
-          field('总对局', `${total} 局`),
-          field('胜　率', winRate),
+          field('胜　场', `${win} 局`) + '　' + field('负　场', `${lose} 局`),
+          field('总对局', `${total} 局`) + '　' + field('胜　率', winRate),
         ],
       }))
     });
@@ -889,7 +931,7 @@ export function apply(ctx: Context, config: Config) {
       title: '对局尚未开始',
       at: username,
       body: ['当前频道还没有进行中的对局。'],
-      tips: ['「cchess.开始」入座并对弈', '「cchess.开始 人机」挑战皮卡鱼'],
+      tips: ['「cchess.开始」入座对弈 · 「cchess.开始 人机」挑战皮卡鱼'],
     })
   }
 
@@ -899,7 +941,7 @@ export function apply(ctx: Context, config: Config) {
       title: '对局已经开战',
       at: username,
       body: ['本局尚未结束，不必重开。'],
-      tips: ['「cchess.认输」结束本局', '「cchess.结束」强制清盘'],
+      tips: ['「cchess.认输」结束本局 · 「cchess.结束」清盘'],
     })
   }
 
@@ -910,6 +952,16 @@ export function apply(ctx: Context, config: Config) {
       at: username,
       body: ['先入座，才好落子。'],
       tips: ['发送「cchess.开始」入座'],
+    })
+  }
+
+  /** 同一频道有结算在途时的统一说法。 */
+  function busyPanel(username: string): string {
+    return panel({
+      icon: '⏳',
+      title: '对局正在推演',
+      at: username,
+      body: ['上一着棋尚未结算，稍候片刻。'],
     })
   }
 
@@ -938,7 +990,7 @@ export function apply(ctx: Context, config: Config) {
       title: reason,
       at: username,
       body: ['请确认着法是否合乎棋规。'],
-      tips: ['纵线：炮二平五 / 炮8平5', '坐标：b2e2', '详见 https://www.xqbase.com/protocol/cchess_move.htm'],
+      tips: ['纵线：炮二平五 / 炮8平5 · 坐标：b2e2', '详见 https://www.xqbase.com/protocol/cchess_move.htm'],
     })
   }
 
@@ -957,8 +1009,8 @@ export function apply(ctx: Context, config: Config) {
       icon: '⚠️',
       title: '排行榜人数有误',
       at: username,
-      body: ['请输入不小于 0 的整数。'],
-      tips: ['例如：cchess.战绩 榜 10'],
+      body: ['请发送不小于 0 的整数。'],
+      tips: ['发送「cchess.战绩 榜 10」可查询前 10 名'],
     })
   }
 
@@ -967,6 +1019,7 @@ export function apply(ctx: Context, config: Config) {
   /** 渲染当前棋盘并封装为图片元素。 */
   /** 出图失败时返回 undefined，panel 会照常发文本，不让一局卡在渲染上。 */
   async function renderBoard(channelId: string): Promise<string | undefined> {
+    if (config.disableImages) return undefined
     try {
       return h.image(await drawChessBoard(channelId), imageMimeType).toString()
     } catch (error) {
@@ -997,8 +1050,7 @@ export function apply(ctx: Context, config: Config) {
       at,
       body: [
         ...extra,
-        field('胜方', withSideIcon(convertTurnToString(winSide))),
-        field('棋手', winners.length ? winners.map((player) => `@${player.username}`).join('、') : '皮卡鱼'),
+        field('胜方', withSideIcon(convertTurnToString(winSide))) + '　' + field('棋手', winners.length ? winners.map((player) => `@${player.username}`).join('、') : '皮卡鱼'),
       ],
       tips: ['发送「cchess.开始」再战一局'],
       image,
@@ -1047,8 +1099,7 @@ export function apply(ctx: Context, config: Config) {
       body: [
         field('棋　手', withSideIcon(humanSide)),
         field('皮卡鱼', withSideIcon(engineSide)),
-        field('先　手', withSideIcon(sideString)),
-        field('思考深度', `${thinkingDepth} 层`),
+        field('先　手', withSideIcon(sideString)) + '　' + field('思考深度', `${thinkingDepth} 层`),
       ],
       tips: ['直接发送着法即可落子，如「炮二平五」或「b2e2」'],
       image: await renderBoard(channelId),
@@ -1074,6 +1125,16 @@ export function apply(ctx: Context, config: Config) {
     if (playerRecord.length === 0) return await sendMessage(session, notJoinedPanel(username));
     const sideString = convertTurnToString(gameRecord.turn);
     if (playerRecord[0].side !== sideString) {
+      // 请求方本人到场：用「拒绝」撤下自己的请求，不必等满 30 秒
+      if (!agree) {
+        await ctx.database.set('cchess_game_records', { channelId }, { isRegretRequest: false })
+        return await sendMessage(session, panel({
+          icon: '✅',
+          title: '悔棋请求已撤下',
+          at: username,
+          body: ['对局继续，落子无悔。'],
+        }));
+      }
       return await sendMessage(session, panel({
         icon: '⚠️',
         title: '无权表决',
@@ -1164,8 +1225,8 @@ export function apply(ctx: Context, config: Config) {
       title,
       body: topPlayers.length
         ? topPlayers.map((player, index) => `${MEDALS[index] ?? `${index + 1}.`} ${player.username}　${player[sortField]} 局`)
-        : ['榜上尚无名姓，快去手谈一局。'],
-      tips: topPlayers.length ? [] : ['发送「cchess.开始」开启对局'],
+        : ['榜上尚无名姓。', '第一局分出胜负，名字就会写在这里。'],
+      tips: topPlayers.length ? [] : ['发送「cchess.开始」开启一局'],
     }));
   }
 
@@ -1694,8 +1755,12 @@ export function apply(ctx: Context, config: Config) {
     context.textAlign = 'center';
     context.textBaseline = 'middle';
 
-    const label = (text: string, x: number, y: number, size: number, color: string) => {
-      context.font = `600 ${size}px ${FONT_STACK}`;
+    // 坐标标号：字号取 TYPE 的档位，字重取 EMPHASIZED_WEIGHT（强调一律 600）
+    const labelFont = `${EMPHASIZED_WEIGHT.title} ${TYPE.titleLarge.size}px ${FONT_STACK}`;
+    const labelSideFont = `${EMPHASIZED_WEIGHT.headline} ${TYPE.headlineSmall.size}px ${FONT_STACK}`;
+
+    const label = (text: string, x: number, y: number, font: string, color: string) => {
+      context.font = font;
       context.fillStyle = color;
       context.fillText(text, x, y);
     };
@@ -1703,17 +1768,17 @@ export function apply(ctx: Context, config: Config) {
     for (let col = 0; col < 9; col++) {
       const x = columnAt(isFlipBoard ? 8 - col : col);
       // 上下各一组：字母用来输入着法，数字是黑方的纵线序号
-      label(FILES[col], x, 30, 22, FRAME.onSurfaceVariant);
-      label(String(col + 1), x, 64, 22, FRAME.onSurfaceVariant);
-      label(RED_FILES[col], x, FRAME_HEIGHT - 62, 24, FRAME.onSurfaceVariant);
-      label(FILES[col], x, FRAME_HEIGHT - 26, 22, FRAME.onSurfaceVariant);
+      label(FILES[col], x, 30, labelFont, FRAME.onSurfaceVariant);
+      label(String(col + 1), x, 64, labelFont, FRAME.onSurfaceVariant);
+      label(RED_FILES[col], x, FRAME_HEIGHT - 62, labelSideFont, FRAME.onSurfaceVariant);
+      label(FILES[col], x, FRAME_HEIGHT - 26, labelFont, FRAME.onSurfaceVariant);
     }
 
     for (let row = 0; row < 10; row++) {
       const y = rowAt(isFlipBoard ? 9 - row : row);
       const text = String(9 - row);
-      label(text, 19, y, 22, FRAME.onSurfaceVariant);
-      label(text, FRAME_WIDTH - 19, y, 22, FRAME.onSurfaceVariant);
+      label(text, 19, y, labelFont, FRAME.onSurfaceVariant);
+      label(text, FRAME_WIDTH - 19, y, labelFont, FRAME.onSurfaceVariant);
     }
 
     return canvas.toBuffer(imageMimeType);
@@ -2137,6 +2202,10 @@ export function apply(ctx: Context, config: Config) {
       let adjustedEndX = startX + (endX - startX) * (dist - 30) / dist
       let adjustedEndY = startY + (endY - startY) * (dist - 30) / dist;
 
+      /*
+       * 箭头压在棋盘图上：色相与明度已过 harmonize() 收进设计系统，令牌里没有带
+       * 透明度的角色色，这一处的 0xb3 透明度照旧保留。
+       */
       await drawLineArrow(context, startX * scale, startY * scale, adjustedEndX * scale, adjustedEndY * scale, ARROW_COLOR + 'b3', 15 * scale)
     }
 
@@ -2154,7 +2223,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
 
-  async function drawLineArrow(ctx, fromX, fromY, toX, toY, color = "black", headSize = 20) {
+  async function drawLineArrow(ctx, fromX, fromY, toX, toY, color = FRAME.onSurface, headSize = 20) {
     var angle = Math.atan2(toY - fromY, toX - fromX);
     var headAngle = 45 * Math.PI / 180;
 
