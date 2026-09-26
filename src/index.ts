@@ -1,5 +1,4 @@
 import { registerDirectInput, directInputConflict } from './ux'
-import { usePresentation, choosePresentation, imageText } from './ux'
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
 import { EMPHASIZED_WEIGHT, FONT_STACK, harmonize, scheme, SHAPE, TYPE } from './m3'
@@ -191,7 +190,6 @@ interface MoveInfo {
 }
 
 export function apply(ctx: Context, config: Config) {
-  const presentation = usePresentation(ctx, 'cchess')
   const logger = ctx.logger('cchess')
   const engines: { [channelId: string]: any } = {};
   /** 正在初始化的引擎，避免同一频道重复创建实例。 */
@@ -1047,8 +1045,7 @@ export function apply(ctx: Context, config: Config) {
     const text = `棋盘：轮到${convertTurnToString(game.turn)}。坐标 a–i 自左向右，0–9 自红方底线向黑方。\n${pieces.join('；')}`
     if (config.disableImages) return text
     try {
-      // 说明文字标记成图片等价物：图文模式随图片去掉，文字模式展开
-      return h.image(await drawChessBoard(channelId), imageMimeType).toString() + imageText(h.text(text)).toString()
+      return h.image(await drawChessBoard(channelId), imageMimeType).toString()
     } catch (error) {
       logger.warn('棋盘图片生成失败：%s', error.message)
       return text
@@ -2355,9 +2352,9 @@ export function apply(ctx: Context, config: Config) {
 
   async function sendMessage(session: Session, message: string): Promise<void> {
     const { bot, channelId } = session;
-    const [messageId] = await session.send(choosePresentation(message, presentation.textOnly(session)));
+    const [messageId] = await session.send(message);
 
-    if (presentation.textOnly(session) || config.retractDelay === 0 || !messageId) return;
+    if (config.retractDelay === 0 || !messageId) return;
 
     // 仅保留最新一条消息，上一条延时撤回，避免刷屏
     const previousMessageId = sentMessages[channelId];
