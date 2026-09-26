@@ -1,5 +1,5 @@
 import { registerDirectInput, directInputConflict } from './ux'
-import { usePresentation, withoutImages } from './ux'
+import { usePresentation, choosePresentation, imageText } from './ux'
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
 import { EMPHASIZED_WEIGHT, FONT_STACK, harmonize, scheme, SHAPE, TYPE } from './m3'
@@ -1045,13 +1045,13 @@ export function apply(ctx: Context, config: Config) {
       if (piece) pieces.push(`${String.fromCharCode(97 + x)}${9-y} ${piece === piece.toUpperCase() ? '红' : '黑'}${names[piece.toLowerCase()] ?? piece}`)
     }))
     const text = `棋盘：轮到${convertTurnToString(game.turn)}。坐标 a–i 自左向右，0–9 自红方底线向黑方。\n${pieces.join('；')}`
-    const description = h('p', {}, h.text(text)).toString()
-    if (config.disableImages) return description
+    if (config.disableImages) return text
     try {
-      return h.image(await drawChessBoard(channelId), imageMimeType).toString() + description
+      // 说明文字标记成图片等价物：图文模式随图片去掉，文字模式展开
+      return h.image(await drawChessBoard(channelId), imageMimeType).toString() + imageText(h.text(text)).toString()
     } catch (error) {
       logger.warn('棋盘图片生成失败：%s', error.message)
-      return description
+      return text
     }
   }
 
@@ -2355,7 +2355,7 @@ export function apply(ctx: Context, config: Config) {
 
   async function sendMessage(session: Session, message: string): Promise<void> {
     const { bot, channelId } = session;
-    const [messageId] = await session.send(presentation.textOnly(session) ? withoutImages(message) : message);
+    const [messageId] = await session.send(choosePresentation(message, presentation.textOnly(session)));
 
     if (presentation.textOnly(session) || config.retractDelay === 0 || !messageId) return;
 
