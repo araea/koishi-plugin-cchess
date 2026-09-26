@@ -1,16 +1,20 @@
 {
   "name": "koishi-plugin-cchess",
   "description": "Koishi 中国象棋：支持玩家对战、皮卡鱼引擎和 FEN 局面导入。",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
     "LICENSE-APACHE",
-    "LICENSE-MIT"
+    "LICENSE-MIT",
+    "DESIGN_SYSTEM.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "yakumo:after:esbuild": "node scripts/copy-assets.mjs"
+    "yakumo:after:esbuild": "node scripts/copy-assets.mjs",
+    "check:design": "node scripts/check-design-system.mjs"
   },
   "koishi": {
     "service": {

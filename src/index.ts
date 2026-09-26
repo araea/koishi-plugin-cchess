@@ -1,3 +1,5 @@
+import { registerDirectInput, directInputConflict } from './ux'
+import { usePresentation, withoutImages } from './ux'
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
 import { EMPHASIZED_WEIGHT, FONT_STACK, harmonize, scheme, SHAPE, TYPE } from './m3'
@@ -189,6 +191,7 @@ interface MoveInfo {
 }
 
 export function apply(ctx: Context, config: Config) {
+  const presentation = usePresentation(ctx, 'cchess')
   const logger = ctx.logger('cchess')
   const engines: { [channelId: string]: any } = {};
   /** 正在初始化的引擎，避免同一频道重复创建实例。 */
@@ -361,6 +364,20 @@ export function apply(ctx: Context, config: Config) {
   }
 
   // 中间件：悔棋表决。仅当频道内有待决请求、且发言者正是应答方时才响应
+  registerDirectInput(ctx, 'cchess', async (session) => {
+    if (!ctx.filter(session)) return false;
+    if (!config.enableDirectInput || !session.channelId || !session.content) return false;
+    const content = session.content.trim();
+    const decision = matchRegretDecision(content);
+    if (!decision && !isMoveString(content) && !isValidFigureMoveName(content)) return false;
+    const [game] = await ctx.database.get('cchess_game_records', {channelId:session.channelId});
+    if (!game?.isStarted || (decision && !game.isRegretRequest)) return false;
+    const [player] = await ctx.database.get('cchess_gaming_player_records', {channelId:session.channelId,userId:session.userId});
+    if (player && player.side !== convertTurnToString(game.turn)) return false;
+    if (decision && !player) return false;
+    return true
+  });
+
   ctx.middleware(async (session, next) => {
     if (!config.enableDirectInput) return next();
     const { channelId, content, userId } = session;
@@ -375,6 +392,7 @@ export function apply(ctx: Context, config: Config) {
     const [playerRecord] = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
     if (playerRecord?.side !== convertTurnToString(gameRecord.turn)) return next();
 
+    if (await directInputConflict(ctx, session)) return;
     await resolveRegret(session, decision === 'agree');
   });
 
@@ -390,6 +408,7 @@ export function apply(ctx: Context, config: Config) {
     const [gameRecord] = await ctx.database.get('cchess_game_records', { channelId });
     if (!gameRecord?.isStarted) return next();
 
+    if (await directInputConflict(ctx, session)) return;
     let playerRecord = await ctx.database.get('cchess_gaming_player_records', { channelId, userId });
 
     // 人机对战中，未加入的玩家自动补位到人类一方
@@ -1019,12 +1038,20 @@ export function apply(ctx: Context, config: Config) {
   /** 渲染当前棋盘并封装为图片元素。 */
   /** 出图失败时返回 undefined，panel 会照常发文本，不让一局卡在渲染上。 */
   async function renderBoard(channelId: string): Promise<string | undefined> {
-    if (config.disableImages) return undefined
+    const game = await getGameRecord(channelId)
+    const names: Record<string,string> = {r:'車',n:'馬',b:'象',a:'士',k:'将',c:'炮',p:'卒'}
+    const pieces: string[] = []
+    game.board?.forEach((row, y) => row.forEach((piece, x) => {
+      if (piece) pieces.push(`${String.fromCharCode(97 + x)}${9-y} ${piece === piece.toUpperCase() ? '红' : '黑'}${names[piece.toLowerCase()] ?? piece}`)
+    }))
+    const text = `棋盘：轮到${convertTurnToString(game.turn)}。坐标 a–i 自左向右，0–9 自红方底线向黑方。\n${pieces.join('；')}`
+    const description = h('p', {}, h.text(text)).toString()
+    if (config.disableImages) return description
     try {
-      return h.image(await drawChessBoard(channelId), imageMimeType).toString()
+      return h.image(await drawChessBoard(channelId), imageMimeType).toString() + description
     } catch (error) {
-      logger.warn('棋盘渲染失败，本次只发文本：%s', error.message)
-      return undefined
+      logger.warn('棋盘图片生成失败：%s', error.message)
+      return description
     }
   }
 
@@ -2328,9 +2355,9 @@ export function apply(ctx: Context, config: Config) {
 
   async function sendMessage(session: Session, message: string): Promise<void> {
     const { bot, channelId } = session;
-    const [messageId] = await session.send(message);
+    const [messageId] = await session.send(presentation.textOnly(session) ? withoutImages(message) : message);
 
-    if (config.retractDelay === 0 || !messageId) return;
+    if (presentation.textOnly(session) || config.retractDelay === 0 || !messageId) return;
 
     // 仅保留最新一条消息，上一条延时撤回，避免刷屏
     const previousMessageId = sentMessages[channelId];
