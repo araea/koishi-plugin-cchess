@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-cchess",
-  "description": "在 Koishi 群里和朋友下中国象棋，支持悔棋、棋谱分享与皮卡鱼引擎对战。",
+  "description": "Koishi 插件：中国象棋，支持悔棋、棋谱分享与皮卡鱼引擎对战。",
   "version": "2.5.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",

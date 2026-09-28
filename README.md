@@ -1,6 +1,6 @@
 # 中国象棋
 
-在 Koishi 群里和朋友下中国象棋，支持悔棋、棋谱分享与皮卡鱼引擎对战。
+Koishi 插件：中国象棋，支持悔棋、棋谱分享与皮卡鱼引擎对战
 
 [![GitHub](https://img.shields.io/badge/GitHub-仓库-181717)](https://github.com/araea/koishi-plugin-cchess)
 [![npm](https://img.shields.io/badge/npm-包-cc3534)](https://www.npmjs.com/package/koishi-plugin-cchess)
