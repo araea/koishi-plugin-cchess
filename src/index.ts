@@ -427,8 +427,9 @@ export function apply(ctx: Context, config: Config) {
   });
 
   ctx.command('cchess', '中国象棋 · 楚河汉界')
+    .userFields(['authority'])
     .action(async ({ session }) => {
-      const { title, entries } = helpOf(session, 'cchess', ['开始', '落子', '悔棋', '认输', '结束', '战绩', '查看云库残局'].map((name) => `cchess.${name}`))
+      const { title, entries } = await helpOf(session, 'cchess', ['开始', '落子', '悔棋', '认输', '结束', '战绩', '查看云库残局'].map((name) => `cchess.${name}`))
       return await sendMessage(session, panel({
         icon: '📋',
         title,
