@@ -1,4 +1,5 @@
 import { registerDirectInput, directInputConflict } from './ux'
+import { helpOf } from './help'
 import { Context, h, Schema, sleep, Session } from 'koishi'
 import { } from '@koishijs/canvas'
 import { EMPHASIZED_WEIGHT, FONT_STACK, harmonize, scheme, SHAPE, TYPE } from './m3'
@@ -17,6 +18,7 @@ export const usage = `## 使用
 
 | 指令 | 说明 |
 | --- | --- |
+| \`cchess\` | 查看指令列表 |
 | \`cchess.开始 [红/黑] [人机]\` | 入座开局，或直接挑战皮卡鱼 |
 | \`cchess.开始 <FEN>\` | 导入局面；随后发送 \`cchess.开始\` 开局 |
 | \`cchess.落子 <着法>\` | 按棋谱落子，如 \`炮二平五\` |
@@ -426,7 +428,13 @@ export function apply(ctx: Context, config: Config) {
 
   ctx.command('cchess', '中国象棋 · 楚河汉界')
     .action(async ({ session }) => {
-      await session.execute(`cchess -h`)
+      const { title, entries } = helpOf(session, 'cchess', ['开始', '落子', '悔棋', '认输', '结束', '战绩', '查看云库残局'].map((name) => `cchess.${name}`))
+      return await sendMessage(session, panel({
+        icon: '📋',
+        title,
+        body: entries.map(({ name, description }) => field(name, description)),
+        tips: ['发送「cchess.开始」入座，「cchess.落子 炮二平五」落子'],
+      }))
     })
 
   ctx.command('cchess.开始 [args:text]', '入座开局，或挑战皮卡鱼')

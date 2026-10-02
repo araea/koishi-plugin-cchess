@@ -19,6 +19,7 @@ npm i koishi-plugin-cchess
 
 | 指令 | 说明 |
 | --- | --- |
+| `cchess` | 查看指令列表 |
 | `cchess.开始 [红/黑] [人机]` | 入座开局，或挑战皮卡鱼 |
 | `cchess.开始 <FEN>` | 导入局面；随后发送 `cchess.开始` 开局 |
 | `cchess.落子 <着法>` | 按棋谱落子，如 `炮二平五` 或 `b2e2` |
