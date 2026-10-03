@@ -1,6 +1,6 @@
 # 中国象棋
 
-Koishi 插件：中国象棋，支持悔棋、棋谱分享与皮卡鱼引擎对战
+Koishi 插件：中国象棋，支持悔棋、战绩排行与皮卡鱼引擎对战
 
 [![GitHub](https://img.shields.io/badge/GitHub-araea%2Fkoishi--plugin--cchess-181717?logo=github&logoColor=white)](https://github.com/araea/koishi-plugin-cchess)
 [![npm](https://img.shields.io/npm/v/koishi-plugin-cchess?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/koishi-plugin-cchess)
@@ -37,7 +37,7 @@ npm i koishi-plugin-cchess
 | `pieceSkin` | string | `象甲棋子` | 棋子皮肤 |
 | `allowFreePieceMovementInHumanMachineMode` | boolean | `false` | 人机模式下允许所有人自由移动棋子 |
 | `enableDirectInput` | boolean | `true` | 对局中直接发送棋谱或「同意」「拒绝」即可应答 |
-| `defaultEngineThinkingDepth` | number | `10` | 引擎思考深度，范围 0–100；越高棋力越强、耗时越长 |
+| `defaultEngineThinkingDepth` | number | `10` | 引擎思考深度，范围 0–100。越高棋力越强，耗时越长 |
 | `defaultMaxLeaderboardEntries` | number | `4` | 排行榜默认显示的人数 |
 | `retractDelay` | number | `0` | 自动撤回延迟（秒），0 表示不撤回 |
 | `imgScale` | number | `1` | 图片分辨率倍率，最小 1 |
@@ -49,7 +49,7 @@ npm i koishi-plugin-cchess
 
 必须安装 `database` 与 `canvas` 服务才能运行。
 
-引擎思考深度过高会显著增加响应耗时；Node.js 不支持 SIMD，不建议设置过大。
+Node.js 不支持 SIMD，引擎思考深度越高耗时越长，不宜设置过大。
 
 ## 链接
 
